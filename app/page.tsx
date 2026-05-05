@@ -2,10 +2,42 @@ import Link from 'next/link'
 import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
 
+const jsonLd = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'SmallBizzWizz',
+  applicationCategory: 'BusinessApplication',
+  operatingSystem: 'Web',
+  description: 'AI business advisor for small business owners and freelancers. Get direct, plain-English answers on pricing, contracts, clients, and hiring.',
+  url: 'https://smallbizzwizz.com',
+  offers: {
+    '@type': 'Offer',
+    price: '19',
+    priceCurrency: 'USD',
+    priceSpecification: {
+      '@type': 'UnitPriceSpecification',
+      billingDuration: 'P1M',
+    },
+  },
+  featureList: [
+    'AI-powered business advice',
+    'Contract review and red flag detection',
+    'Pricing guidance for freelancers',
+    'Client dispute resolution advice',
+    'Hiring and firing guidance',
+    'File and document upload support',
+  ],
+}
+
 export default async function HomePage() {
   const { userId } = await auth()
   if (userId) redirect('/chat')
   return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
     <div style={{ fontFamily: "'DM Sans', sans-serif", background: '#f7f4ef', color: '#0f0e0c', minHeight: '100vh' }}>
 
       {/* Nav */}
@@ -137,5 +169,6 @@ export default async function HomePage() {
       </footer>
 
     </div>
+    </>
   )
 }
