@@ -13,7 +13,7 @@ export default async function HomePage() {
         <div style={{ fontFamily: 'Georgia, serif', fontSize: '1.2rem', fontWeight: 400 }}>
           SmallBizz<span style={{ color: '#c8410a', fontStyle: 'italic' }}>Wizz</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+        <div className="landing-nav-buttons" style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
           <Link href="/sign-in" style={{ fontSize: '0.875rem', color: '#4a4740', textDecoration: 'none', padding: '0.5rem 1.25rem', border: '1px solid #e4e0d8', borderRadius: '6px', fontWeight: 500 }}>Sign in</Link>
           <Link href="/sign-up" style={{ background: '#c8410a', color: '#fff', padding: '0.5rem 1.25rem', borderRadius: '6px', fontSize: '0.875rem', textDecoration: 'none', fontWeight: 500 }}>
             Get started

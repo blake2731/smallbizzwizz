@@ -24,3 +24,35 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+/* Prevent iOS auto-zoom on input focus (triggers when font-size < 16px) */
+@media (max-width: 768px) {
+  textarea, input[type="text"], input[type="email"] {
+    font-size: 16px !important;
+  }
+}
+
+/* Suggested questions: 1 column on small phones */
+@media (max-width: 480px) {
+  .suggested-questions {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Subscribe pricing card: not sticky on mobile (already stacked) */
+@media (max-width: 640px) {
+  .pricing-card-sticky {
+    position: static !important;
+  }
+}
+
+/* Landing nav: tighten gap on small screens */
+@media (max-width: 400px) {
+  .landing-nav-buttons {
+    gap: 0.5rem !important;
+  }
+  .landing-nav-buttons a {
+    padding: 0.4rem 0.75rem !important;
+    font-size: 0.8rem !important;
+  }
+}

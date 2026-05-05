@@ -203,7 +203,7 @@ export default function ChatPage() {
               <p style={{ fontSize: '0.95rem', color: '#8a8680', marginBottom: '2.5rem' }}>
                 Ask anything about your business — deals, pricing, clients, contracts, hiring.
               </p>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', textAlign: 'left' }}>
+              <div className="suggested-questions" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', textAlign: 'left' }}>
                 {[
                   'Is this business deal fair or am I being taken advantage of?',
                   'What should I charge for my services?',

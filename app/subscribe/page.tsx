@@ -75,7 +75,7 @@ export default function SubscribePage() {
         </div>
 
         {/* Right — pricing card */}
-        <div style={{ position: 'sticky', top: '2rem' }}>
+        <div className="pricing-card-sticky" style={{ position: 'sticky', top: '2rem' }}>
           <div style={{ background: '#fff', border: '1px solid #e4e0d8', borderRadius: '12px', overflow: 'hidden' }}>
 
             <div style={{ background: '#0f0e0c', padding: '1.75rem 2rem' }}>
