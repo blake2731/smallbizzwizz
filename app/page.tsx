@@ -24,7 +24,7 @@ export default async function HomePage() {
       {/* Hero */}
       <section style={{ maxWidth: '760px', margin: '0 auto', padding: '5rem 2rem 4rem', textAlign: 'center' }}>
         <div style={{ display: 'inline-block', background: '#fff', border: '1px solid #e4e0d8', borderRadius: '100px', padding: '0.35rem 1rem', fontSize: '0.8rem', color: '#8a8680', marginBottom: '1.75rem' }}>
-          $19/month · Cancel anytime
+          7-day free trial · then $19/month
         </div>
         <h1 style={{ fontFamily: 'Georgia, serif', fontSize: 'clamp(2rem, 5vw, 3.25rem)', fontWeight: 400, lineHeight: 1.2, marginBottom: '1.25rem', color: '#0f0e0c' }}>
           The business-savvy friend<br />you never had
@@ -33,9 +33,9 @@ export default async function HomePage() {
           Ask anything about your business — pricing, deals, contracts, clients, hiring. Get a straight answer in plain English. No hedging, no jargon, no "it depends."
         </p>
         <Link href="/sign-up" style={{ display: 'inline-block', background: '#c8410a', color: '#fff', padding: '0.875rem 2rem', borderRadius: '6px', fontSize: '1rem', fontWeight: 500, textDecoration: 'none' }}>
-          Start for $19/month →
+          Start free 7-day trial →
         </Link>
-        <p style={{ marginTop: '0.875rem', fontSize: '0.8rem', color: '#8a8680' }}>No contracts. Cancel anytime.</p>
+        <p style={{ marginTop: '0.875rem', fontSize: '0.8rem', color: '#8a8680' }}>No charge for 7 days. Cancel anytime.</p>
       </section>
 
       {/* Chat preview */}
@@ -114,6 +114,7 @@ export default async function HomePage() {
               'Pricing, contracts, hiring, deals, clients',
               'Straight answers in plain English',
               'Available whenever you need it',
+              '7-day free trial to start',
               'Cancel anytime',
             ].map((f) => (
               <div key={f} style={{ fontSize: '0.875rem', color: '#4a4740', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
@@ -122,7 +123,7 @@ export default async function HomePage() {
             ))}
           </div>
           <Link href="/sign-up" style={{ display: 'block', background: '#c8410a', color: '#fff', padding: '0.875rem', borderRadius: '6px', fontSize: '1rem', fontWeight: 500, textDecoration: 'none' }}>
-            Get started →
+            Start free 7-day trial →
           </Link>
         </div>
       </section>

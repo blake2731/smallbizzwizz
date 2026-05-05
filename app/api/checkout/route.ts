@@ -17,6 +17,10 @@ export async function POST(req: NextRequest) {
     mode: 'subscription',
     line_items: [{ price: process.env.STRIPE_PRICE_ID!, quantity: 1 }],
     metadata: { userId },
+    subscription_data: {
+      trial_period_days: 7,
+      metadata: { userId },
+    },
     customer_email: user?.emailAddresses[0]?.emailAddress ?? undefined,
     success_url: `${origin}/subscribe/success`,
     cancel_url: `${origin}/subscribe`,

@@ -23,7 +23,8 @@ export async function POST(req: NextRequest) {
     const session = event.data.object as Stripe.Checkout.Session
     const userId = session.metadata?.userId
 
-    if (userId && session.payment_status === 'paid') {
+    // Grant access for both paid and trial checkouts (trial has payment_status 'no_payment_required')
+    if (userId && session.subscription) {
       const clerk = await clerkClient()
       await clerk.users.updateUserMetadata(userId, {
         publicMetadata: {
@@ -35,11 +36,22 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  if (event.type === 'customer.subscription.deleted') {
+  if (event.type === 'customer.subscription.deleted' || event.type === 'customer.subscription.updated') {
     const subscription = event.data.object as Stripe.Subscription
-    // TODO: revoke access when subscription is cancelled
-    // Needs a DB lookup by stripeCustomerId — add in a future step
-    console.log('Subscription cancelled:', subscription.customer)
+    const shouldRevoke =
+      event.type === 'customer.subscription.deleted' ||
+      subscription.status === 'canceled' ||
+      subscription.status === 'unpaid'
+
+    if (shouldRevoke) {
+      const userId = subscription.metadata?.userId
+      if (userId) {
+        const clerk = await clerkClient()
+        await clerk.users.updateUserMetadata(userId, {
+          publicMetadata: { subscribed: false },
+        })
+      }
+    }
   }
 
   return NextResponse.json({ received: true })

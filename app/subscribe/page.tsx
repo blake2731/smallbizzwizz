@@ -27,10 +27,13 @@ export default function SubscribePage() {
     <div style={{ minHeight: '100vh', background: '#f7f4ef', fontFamily: "'DM Sans', sans-serif", color: '#0f0e0c' }}>
 
       {/* Nav */}
-      <nav style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1.25rem 2rem', borderBottom: '1px solid #e4e0d8', background: '#fff' }}>
+      <nav style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1.25rem 2rem', borderBottom: '1px solid #e4e0d8', background: '#fff' }}>
         <div style={{ fontFamily: 'Georgia, serif', fontSize: '1.2rem', fontWeight: 400 }}>
           SmallBizz<span style={{ color: '#c8410a', fontStyle: 'italic' }}>Wizz</span>
         </div>
+        <a href="/sign-in" style={{ fontSize: '0.875rem', color: '#4a4740', textDecoration: 'none', padding: '0.5rem 1.25rem', border: '1px solid #e4e0d8', borderRadius: '6px', fontWeight: 500 }}>
+          Sign in
+        </a>
       </nav>
 
       <div style={{ maxWidth: '960px', margin: '0 auto', padding: '4rem 2rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '3rem', alignItems: 'start' }}>
@@ -77,21 +80,25 @@ export default function SubscribePage() {
 
             <div style={{ background: '#0f0e0c', padding: '1.75rem 2rem' }}>
               <div style={{ fontSize: '0.75rem', color: '#8a8680', letterSpacing: '0.08em', textTransform: 'uppercase', marginBottom: '0.5rem' }}>SmallBizzWizz</div>
+              <div style={{ display: 'inline-block', background: '#c8410a', color: '#fff', fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.05em', textTransform: 'uppercase', padding: '0.25rem 0.6rem', borderRadius: '4px', marginBottom: '0.75rem' }}>
+                7-day free trial
+              </div>
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.25rem' }}>
                 <span style={{ fontFamily: 'Georgia, serif', fontSize: '3.5rem', color: '#fff', lineHeight: 1 }}>$19</span>
-                <span style={{ fontSize: '0.9rem', color: '#8a8680', paddingBottom: '0.5rem' }}>/ month</span>
+                <span style={{ fontSize: '0.9rem', color: '#8a8680', paddingBottom: '0.5rem' }}>/ month after</span>
               </div>
-              <div style={{ fontSize: '0.8rem', color: '#6b6760', marginTop: '0.5rem' }}>Cancel anytime. No contracts.</div>
+              <div style={{ fontSize: '0.8rem', color: '#6b6760', marginTop: '0.5rem' }}>No charge today. Cancel anytime.</div>
             </div>
 
             <div style={{ padding: '1.75rem 2rem' }}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginBottom: '1.75rem' }}>
                 {[
+                  '7 days free — no card charge today',
                   'Unlimited questions, any time',
                   'Pricing, contracts, deals, hiring',
                   'Direct answers — no hedging',
                   'Plain English, no jargon',
-                  'Cancel from your account anytime',
+                  'Cancel anytime before trial ends',
                 ].map((f) => (
                   <div key={f} style={{ display: 'flex', alignItems: 'flex-start', gap: '0.6rem', fontSize: '0.875rem', color: '#4a4740' }}>
                     <span style={{ color: '#c8410a', fontWeight: 700, marginTop: '1px', flexShrink: 0 }}>✓</span>
@@ -110,7 +117,7 @@ export default function SubscribePage() {
                   transition: 'background 0.15s', letterSpacing: '0.01em',
                 }}
               >
-                {loading ? 'Redirecting to checkout...' : 'Start for $19 / month →'}
+                {loading ? 'Redirecting to checkout...' : 'Start free 7-day trial →'}
               </button>
 
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', marginTop: '1rem' }}>

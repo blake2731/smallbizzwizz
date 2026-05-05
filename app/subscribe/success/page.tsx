@@ -17,10 +17,10 @@ export default function SuccessPage() {
         SmallBizz<span style={{ color: '#c8410a', fontStyle: 'italic' }}>Wizz</span>
       </p>
       <h1 style={{ fontFamily: 'Georgia, serif', fontSize: '1.75rem', fontWeight: 400, color: '#0f0e0c', marginBottom: '0.75rem' }}>
-        You&apos;re in.
+        Your 7-day trial starts now.
       </h1>
       <p style={{ fontSize: '0.95rem', color: '#8a8680', marginBottom: '2rem' }}>
-        Setting up your account — taking you to the advisor now...
+        No charge for 7 days — taking you to the advisor now...
       </p>
       <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
         {[0, 1, 2].map((i) => (
