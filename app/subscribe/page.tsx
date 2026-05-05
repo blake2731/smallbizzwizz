@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useAuth, SignOutButton } from '@clerk/nextjs'
 
 const examples = [
   { q: 'Is this contract fair?', a: 'Red flag on clause 8 — they can cancel with 0 notice and keep your deposit. Push back.' },
@@ -10,6 +11,7 @@ const examples = [
 
 export default function SubscribePage() {
   const [loading, setLoading] = useState(false)
+  const { isSignedIn } = useAuth()
 
   const handleSubscribe = async () => {
     setLoading(true)
@@ -31,9 +33,17 @@ export default function SubscribePage() {
         <div style={{ fontFamily: 'Georgia, serif', fontSize: '1.2rem', fontWeight: 400 }}>
           SmallBizz<span style={{ color: '#c8410a', fontStyle: 'italic' }}>Wizz</span>
         </div>
-        <a href="/sign-in" style={{ fontSize: '0.875rem', color: '#4a4740', textDecoration: 'none', padding: '0.5rem 1.25rem', border: '1px solid #e4e0d8', borderRadius: '6px', fontWeight: 500 }}>
-          Sign in
-        </a>
+        {isSignedIn ? (
+          <SignOutButton>
+            <button style={{ fontSize: '0.875rem', color: '#4a4740', background: 'none', padding: '0.5rem 1.25rem', border: '1px solid #e4e0d8', borderRadius: '6px', fontWeight: 500, cursor: 'pointer' }}>
+              Sign out
+            </button>
+          </SignOutButton>
+        ) : (
+          <a href="/sign-in" style={{ fontSize: '0.875rem', color: '#4a4740', textDecoration: 'none', padding: '0.5rem 1.25rem', border: '1px solid #e4e0d8', borderRadius: '6px', fontWeight: 500 }}>
+            Sign in
+          </a>
+        )}
       </nav>
 
       <div style={{ maxWidth: '960px', margin: '0 auto', padding: '4rem 2rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '3rem', alignItems: 'start' }}>
