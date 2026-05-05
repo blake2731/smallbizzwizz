@@ -1,4 +1,4 @@
-import { auth } from '@clerk/nextjs/server'
+import { auth, currentUser } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 
@@ -45,27 +45,77 @@ If someone is about to make a serious mistake, tell them clearly. If someone is 
 
 You are not a licensed attorney, accountant, or financial advisor. For high-stakes legal or financial decisions (lawsuits, major acquisitions, tax strategy), tell them to get a professional involved — but still give your read on the situation.`
 
+const ALLOWED_MEDIA_TYPES = new Set([
+  'application/pdf',
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp',
+])
+
+type ContentBlock =
+  | { type: 'text'; text: string }
+  | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
+  | { type: 'document'; source: { type: 'base64'; media_type: 'application/pdf'; data: string } }
+
 export async function POST(req: NextRequest) {
   const { userId } = await auth()
-
   if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const { messages } = await req.json()
+  const user = await currentUser()
+  if (!user?.publicMetadata?.subscribed) {
+    return NextResponse.json({ error: 'Subscription required' }, { status: 403 })
+  }
+
+  const { messages, attachment } = await req.json()
 
   if (!messages || !Array.isArray(messages)) {
     return NextResponse.json({ error: 'Invalid messages' }, { status: 400 })
   }
 
+  if (attachment) {
+    if (!ALLOWED_MEDIA_TYPES.has(attachment.mediaType)) {
+      return NextResponse.json({ error: 'Unsupported file type' }, { status: 400 })
+    }
+    // base64 is ~4/3× raw; 13.4MB base64 ≈ 10MB raw
+    if (typeof attachment.data === 'string' && attachment.data.length > 13_400_000) {
+      return NextResponse.json({ error: 'File too large' }, { status: 400 })
+    }
+  }
+
+  const claudeMessages = messages.map((m: { role: string; content: string }, i: number) => {
+    if (i === messages.length - 1 && attachment && m.role === 'user') {
+      const content: ContentBlock[] = []
+
+      if (attachment.mediaType === 'application/pdf') {
+        content.push({
+          type: 'document',
+          source: { type: 'base64', media_type: 'application/pdf', data: attachment.data },
+        })
+      } else {
+        content.push({
+          type: 'image',
+          source: { type: 'base64', media_type: attachment.mediaType, data: attachment.data },
+        })
+      }
+
+      content.push({ type: 'text', text: m.content || 'Please review this document.' })
+      return { role: 'user' as const, content }
+    }
+
+    return { role: m.role as 'user' | 'assistant', content: m.content }
+  })
+
   const response = await client.messages.create({
     model: 'claude-sonnet-4-6',
-    max_tokens: 1024,
+    max_tokens: 2048,
     system: SYSTEM_PROMPT,
-    messages,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    messages: claudeMessages as any,
   })
 
   const text = response.content[0].type === 'text' ? response.content[0].text : ''
-
   return NextResponse.json({ message: text })
 }
