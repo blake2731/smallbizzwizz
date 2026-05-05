@@ -1,6 +1,10 @@
 import Link from 'next/link'
+import { auth } from '@clerk/nextjs/server'
+import { redirect } from 'next/navigation'
 
-export default function HomePage() {
+export default async function HomePage() {
+  const { userId } = await auth()
+  if (userId) redirect('/chat')
   return (
     <div style={{ fontFamily: "'DM Sans', sans-serif", background: '#f7f4ef', color: '#0f0e0c', minHeight: '100vh' }}>
 
