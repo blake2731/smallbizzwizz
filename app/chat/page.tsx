@@ -57,7 +57,7 @@ export default function ChatPage() {
         <div style={{ fontFamily: 'Georgia, serif', fontSize: '1.25rem', fontWeight: 400 }}>
           SmallBizz<span style={{ color: '#c8410a', fontStyle: 'italic' }}>Wizz</span>
         </div>
-        <UserButton afterSignOutUrl="/" />
+        <UserButton />
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '2rem 1rem' }}>
