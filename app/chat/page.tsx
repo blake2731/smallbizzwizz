@@ -15,6 +15,25 @@ interface Attachment {
   data: string
 }
 
+function PaperclipIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 17.99 8.84l-8.57 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+    </svg>
+  )
+}
+
 function InlineText({ text }: { text: string }) {
   const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g)
   return (
@@ -237,8 +256,8 @@ export default function ChatPage() {
                 {m.role === 'user' ? (
                   <>
                     {m.attachmentName && (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginBottom: m.content ? '0.5rem' : 0, fontSize: '0.78rem', color: '#9a9690', background: '#1a1917', borderRadius: '4px', padding: '0.3rem 0.5rem' }}>
-                        <span>📎</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: m.content ? '0.5rem' : 0, fontSize: '0.78rem', color: '#9a9690', background: '#1a1917', borderRadius: '4px', padding: '0.3rem 0.5rem' }}>
+                        <PaperclipIcon size={13} />
                         <span style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.attachmentName}</span>
                       </div>
                     )}
@@ -274,8 +293,8 @@ export default function ChatPage() {
       <div style={{ borderTop: '1px solid #e4e0d8', background: '#fff', padding: '1rem 1.5rem' }}>
         <div style={{ maxWidth: '680px', margin: '0 auto' }}>
           {attachment && (
-            <div style={{ marginBottom: '0.5rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', background: '#f7f4ef', border: '1px solid #e4e0d8', borderRadius: '6px', padding: '0.3rem 0.5rem 0.3rem 0.6rem', fontSize: '0.8rem', color: '#4a4740' }}>
-              <span>📎</span>
+            <div style={{ marginBottom: '0.5rem', display: 'inline-flex', alignItems: 'center', gap: '0.45rem', background: '#f7f4ef', border: '1px solid #e4e0d8', borderRadius: '6px', padding: '0.3rem 0.5rem 0.3rem 0.6rem', fontSize: '0.8rem', color: '#4a4740' }}>
+              <PaperclipIcon size={14} />
               <span style={{ maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {attachment.name}
               </span>
@@ -291,13 +310,14 @@ export default function ChatPage() {
             <button
               onClick={() => fileInputRef.current?.click()}
               title="Attach a file (PDF or image, max 10MB)"
+              aria-label="Attach a file"
               style={{
                 background: 'none', border: '1px solid #e4e0d8', borderRadius: '8px',
                 padding: '0.72rem 0.8rem', cursor: 'pointer', color: '#8a8680',
-                fontSize: '1rem', flexShrink: 0, lineHeight: 1,
+                flexShrink: 0, lineHeight: 0, display: 'inline-flex', alignItems: 'center',
               }}
             >
-              📎
+              <PaperclipIcon size={18} />
             </button>
             <textarea
               ref={textareaRef}
@@ -305,7 +325,7 @@ export default function ChatPage() {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
               onInput={handleTextareaInput}
-              placeholder="Ask anything about your business..."
+              placeholder="Ask anything..."
               rows={1}
               style={{
                 flex: 1, padding: '0.75rem 1rem', border: '1px solid #e4e0d8', borderRadius: '8px',
@@ -335,7 +355,7 @@ export default function ChatPage() {
             onChange={handleFileChange}
           />
           <p style={{ textAlign: 'center', fontSize: '0.72rem', color: '#8a8680', marginTop: '0.5rem' }}>
-            Press Enter to send · Shift+Enter for new line · 📎 attach contracts or images
+            Press Enter to send · Shift+Enter for new line · attach contracts or images
           </p>
         </div>
       </div>
