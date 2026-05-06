@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
-import { UserButton } from '@clerk/nextjs'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { UserButton, useUser } from '@clerk/nextjs'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -13,6 +13,40 @@ interface Attachment {
   name: string
   mediaType: string
   data: string
+}
+
+interface Conversation {
+  id: string
+  title: string
+  updatedAt: number
+  messages: Message[]
+}
+
+function storageKey(userId: string | null | undefined) {
+  return userId ? `sbw_chats_${userId}` : null
+}
+
+function loadConversations(userId: string | null | undefined): Conversation[] {
+  const key = storageKey(userId)
+  if (!key) return []
+  try {
+    const raw = localStorage.getItem(key)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function persistConversations(userId: string | null | undefined, conversations: Conversation[]) {
+  const key = storageKey(userId)
+  if (!key) return
+  try {
+    localStorage.setItem(key, JSON.stringify(conversations))
+  } catch {
+    // localStorage full — silently drop
+  }
 }
 
 function PaperclipIcon({ size = 16 }: { size?: number }) {
@@ -30,6 +64,87 @@ function PaperclipIcon({ size = 16 }: { size?: number }) {
       aria-hidden="true"
     >
       <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 17.99 8.84l-8.57 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+    </svg>
+  )
+}
+
+function MenuIcon({ size = 22 }: { size?: number }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <line x1="4" y1="6" x2="20" y2="6" />
+      <line x1="4" y1="12" x2="20" y2="12" />
+      <line x1="4" y1="18" x2="20" y2="18" />
+    </svg>
+  )
+}
+
+function PlusIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <line x1="12" y1="5" x2="12" y2="19" />
+      <line x1="5" y1="12" x2="19" y2="12" />
+    </svg>
+  )
+}
+
+function TrashIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <polyline points="3 6 5 6 21 6" />
+      <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+    </svg>
+  )
+}
+
+function CloseIcon({ size = 18 }: { size?: number }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
     </svg>
   )
 }
@@ -114,17 +229,54 @@ function MarkdownContent({ text }: { text: string }) {
 }
 
 export default function ChatPage() {
+  const { user } = useUser()
+  const userId = user?.id ?? null
+
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [attachment, setAttachment] = useState<Attachment | null>(null)
   const [loading, setLoading] = useState(false)
+  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [currentChatId, setCurrentChatId] = useState<string | null>(null)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+
   const bottomRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
+    if (!userId) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setConversations(loadConversations(userId))
+  }, [userId])
+
+  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
+
+  const upsertConversation = useCallback((id: string, msgs: Message[]) => {
+    if (!userId || msgs.length === 0) return
+    setConversations(prev => {
+      const existing = prev.find(c => c.id === id)
+      let next: Conversation[]
+      if (existing) {
+        next = [
+          { ...existing, messages: msgs, updatedAt: Date.now() },
+          ...prev.filter(c => c.id !== id),
+        ]
+      } else {
+        const firstUser = msgs.find(m => m.role === 'user')
+        const titleSource = (firstUser?.content?.trim() || firstUser?.attachmentName || 'New chat')
+        const title = titleSource.length > 50 ? titleSource.slice(0, 50) + '…' : titleSource
+        next = [
+          { id, title, updatedAt: Date.now(), messages: msgs },
+          ...prev,
+        ]
+      }
+      persistConversations(userId, next)
+      return next
+    })
+  }, [userId])
 
   const handleTextareaInput = () => {
     const el = textareaRef.current
@@ -173,6 +325,13 @@ export default function ChatPage() {
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
     setLoading(true)
 
+    let chatId = currentChatId
+    if (!chatId) {
+      chatId = crypto.randomUUID()
+      setCurrentChatId(chatId)
+    }
+    upsertConversation(chatId, newMessages)
+
     try {
       const body: { messages: Message[]; attachment?: Attachment } = { messages: newMessages }
       if (pendingAttachment) body.attachment = pendingAttachment
@@ -184,9 +343,13 @@ export default function ChatPage() {
       })
 
       const data = await res.json()
-      setMessages([...newMessages, { role: 'assistant', content: data.message }])
+      const finalMessages: Message[] = [...newMessages, { role: 'assistant', content: data.message }]
+      setMessages(finalMessages)
+      upsertConversation(chatId, finalMessages)
     } catch {
-      setMessages([...newMessages, { role: 'assistant', content: 'Something went wrong. Please try again.' }])
+      const finalMessages: Message[] = [...newMessages, { role: 'assistant', content: 'Something went wrong. Please try again.' }]
+      setMessages(finalMessages)
+      upsertConversation(chatId, finalMessages)
     } finally {
       setLoading(false)
     }
@@ -199,14 +362,150 @@ export default function ChatPage() {
     }
   }
 
+  const newChat = () => {
+    setMessages([])
+    setCurrentChatId(null)
+    setInput('')
+    setAttachment(null)
+    if (textareaRef.current) textareaRef.current.style.height = 'auto'
+    setSidebarOpen(false)
+  }
+
+  const loadChat = (id: string) => {
+    const conv = conversations.find(c => c.id === id)
+    if (!conv) return
+    setMessages(conv.messages)
+    setCurrentChatId(id)
+    setInput('')
+    setAttachment(null)
+    if (textareaRef.current) textareaRef.current.style.height = 'auto'
+    setSidebarOpen(false)
+  }
+
+  const deleteChat = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation()
+    if (!userId) return
+    setConversations(prev => {
+      const next = prev.filter(c => c.id !== id)
+      persistConversations(userId, next)
+      return next
+    })
+    if (currentChatId === id) {
+      setMessages([])
+      setCurrentChatId(null)
+    }
+  }
+
   const canSend = !loading && (!!input.trim() || !!attachment)
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#f7f4ef', fontFamily: "'DM Sans', sans-serif" }}>
 
+      <aside
+        aria-hidden={!sidebarOpen}
+        style={{
+          position: 'fixed', top: 0, left: 0, height: '100vh', width: '280px',
+          maxWidth: '85vw',
+          background: '#fff',
+          borderRight: '1px solid #e4e0d8',
+          transform: sidebarOpen ? 'translateX(0)' : 'translateX(-100%)',
+          transition: 'transform 0.2s ease',
+          zIndex: 30,
+          display: 'flex', flexDirection: 'column',
+          pointerEvents: sidebarOpen ? 'auto' : 'none',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem', borderBottom: '1px solid #e4e0d8' }}>
+          <div style={{ fontFamily: 'Georgia, serif', fontSize: '1.05rem', color: '#0f0e0c' }}>
+            Your chats
+          </div>
+          <button
+            onClick={() => setSidebarOpen(false)}
+            aria-label="Close chats"
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: '#8a8680', display: 'inline-flex', alignItems: 'center', padding: '0.25rem',
+            }}
+          >
+            <CloseIcon size={18} />
+          </button>
+        </div>
+        <button
+          onClick={newChat}
+          style={{
+            margin: '0.75rem', padding: '0.7rem 0.9rem',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: '0.45rem',
+            background: '#0f0e0c', color: '#f7f4ef', border: 'none', borderRadius: '8px',
+            cursor: 'pointer', fontSize: '0.85rem', fontWeight: 500,
+          }}
+        >
+          <PlusIcon size={16} />
+          New chat
+        </button>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '0 0.4rem 1rem' }}>
+          {conversations.length === 0 && (
+            <p style={{ padding: '0.5rem 0.85rem', fontSize: '0.8rem', color: '#9a9690' }}>
+              No saved chats yet.
+            </p>
+          )}
+          {conversations.map(c => (
+            <div
+              key={c.id}
+              onClick={() => loadChat(c.id)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: '0.4rem',
+                padding: '0.55rem 0.7rem', margin: '0.1rem 0',
+                borderRadius: '6px', cursor: 'pointer',
+                background: c.id === currentChatId ? '#f1ede5' : 'transparent',
+                fontSize: '0.85rem', color: '#2a2724',
+              }}
+            >
+              <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {c.title}
+              </span>
+              <button
+                onClick={(e) => deleteChat(c.id, e)}
+                aria-label="Delete chat"
+                style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: '#9a9690', display: 'inline-flex', alignItems: 'center',
+                  padding: '0.2rem', flexShrink: 0,
+                }}
+              >
+                <TrashIcon size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+      </aside>
+
+      {sidebarOpen && (
+        <div
+          onClick={() => setSidebarOpen(false)}
+          aria-hidden="true"
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(15, 14, 12, 0.35)',
+            zIndex: 25,
+          }}
+        />
+      )}
+
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '1rem 1.5rem', borderBottom: '1px solid #e4e0d8', background: '#fff' }}>
-        <div style={{ fontFamily: 'Georgia, serif', fontSize: '1.25rem', fontWeight: 400 }}>
-          SmallBizz<span style={{ color: '#c8410a', fontStyle: 'italic' }}>Wizz</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+          <button
+            onClick={() => setSidebarOpen(true)}
+            aria-label="Open chats"
+            style={{
+              background: 'none', border: 'none', cursor: 'pointer',
+              color: '#4a4740', display: 'inline-flex', alignItems: 'center',
+              padding: '0.25rem',
+            }}
+          >
+            <MenuIcon size={22} />
+          </button>
+          <div style={{ fontFamily: 'Georgia, serif', fontSize: '1.25rem', fontWeight: 400 }}>
+            SmallBizz<span style={{ color: '#c8410a', fontStyle: 'italic' }}>Wizz</span>
+          </div>
         </div>
         <UserButton />
       </div>
