@@ -55,9 +55,6 @@ export default async function HomePage() {
 
       {/* Hero */}
       <section style={{ maxWidth: '760px', margin: '0 auto', padding: '5rem 2rem 4rem', textAlign: 'center' }}>
-        <div style={{ display: 'inline-block', background: '#fff', border: '1px solid #e4e0d8', borderRadius: '100px', padding: '0.35rem 1rem', fontSize: '0.8rem', color: '#8a8680', marginBottom: '1.75rem' }}>
-          7-day free trial · then $19/month
-        </div>
         <h1 style={{ fontFamily: 'Georgia, serif', fontSize: 'clamp(2rem, 5vw, 3.25rem)', fontWeight: 400, lineHeight: 1.2, marginBottom: '1.25rem', color: '#0f0e0c' }}>
           The business-savvy friend<br />you never had
         </h1>
