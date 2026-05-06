@@ -2,7 +2,8 @@ import { auth, currentUser } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { and, asc, eq } from 'drizzle-orm'
-import { db, conversation, message } from '@/lib/db'
+import { db, conversation, message, profile } from '@/lib/db'
+import { BUSINESS_CONTEXTS } from '@/lib/industry-contexts'
 
 const client = new Anthropic()
 
@@ -49,6 +50,29 @@ type Attachment = {
 function deriveTitle(userMessage: string, attachmentName: string | null): string {
   const source = userMessage.trim() || attachmentName || 'New chat'
   return source.length > 50 ? source.slice(0, 50) + '…' : source
+}
+
+async function buildSystemPrompt(userId: string): Promise<string> {
+  const [row] = await db
+    .select({ name: profile.name, businessType: profile.businessType })
+    .from(profile)
+    .where(eq(profile.userId, userId))
+    .limit(1)
+
+  if (!row) return SYSTEM_PROMPT
+
+  const profileLines: string[] = []
+  if (row.name) profileLines.push(`User's name: ${row.name}`)
+  if (row.businessType) profileLines.push(`Business type: ${row.businessType}`)
+
+  let augmented = SYSTEM_PROMPT
+  if (profileLines.length > 0) {
+    augmented += `\n\nAbout this user:\n${profileLines.join('\n')}`
+  }
+  if (row.businessType && BUSINESS_CONTEXTS[row.businessType]) {
+    augmented += `\n\n${BUSINESS_CONTEXTS[row.businessType]}`
+  }
+  return augmented
 }
 
 export async function POST(req: NextRequest) {
@@ -138,10 +162,12 @@ export async function POST(req: NextRequest) {
     return { role: m.role, content: m.content }
   })
 
+  const systemPrompt = await buildSystemPrompt(userId)
+
   const response = await client.messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 2048,
-    system: SYSTEM_PROMPT,
+    system: systemPrompt,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     messages: claudeMessages as any,
   })

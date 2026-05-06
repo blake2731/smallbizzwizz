@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { UserButton } from '@clerk/nextjs'
+import { BUSINESS_TYPE_OPTIONS } from '@/lib/business-types'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -19,6 +20,12 @@ interface ConversationSummary {
   id: string
   title: string
   updatedAt: string
+}
+
+interface Profile {
+  name: string | null
+  businessType: string | null
+  onboardedAt: string | null
 }
 
 function PaperclipIcon({ size = 16 }: { size?: number }) {
@@ -209,6 +216,12 @@ export default function ChatPage() {
   const [currentChatId, setCurrentChatId] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
+  const [profile, setProfile] = useState<Profile | null>(null)
+  const [showOnboarding, setShowOnboarding] = useState(false)
+  const [onboardingName, setOnboardingName] = useState('')
+  const [onboardingBusiness, setOnboardingBusiness] = useState('')
+  const [savingProfile, setSavingProfile] = useState(false)
+
   const bottomRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -230,6 +243,25 @@ export default function ChatPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     refreshConversations()
   }, [refreshConversations])
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/profile')
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data: Profile | null) => {
+        if (cancelled || !data) return
+        setProfile(data)
+        if (!data.onboardedAt) {
+          setOnboardingName(data.name ?? '')
+          setOnboardingBusiness(data.businessType ?? '')
+          setShowOnboarding(true)
+        }
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -362,6 +394,45 @@ export default function ChatPage() {
     }
   }
 
+  const saveProfile = async (payload: { name?: string; businessType?: string }) => {
+    setSavingProfile(true)
+    try {
+      const res = await fetch('/api/profile', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (res.ok) {
+        const data: Profile = await res.json()
+        setProfile(data)
+      }
+    } catch {
+      // network error — leave modal open so user can retry
+    } finally {
+      setSavingProfile(false)
+    }
+  }
+
+  const handleOnboardingSave = async () => {
+    await saveProfile({
+      name: onboardingName.trim(),
+      businessType: onboardingBusiness,
+    })
+    setShowOnboarding(false)
+  }
+
+  const handleOnboardingSkip = async () => {
+    await saveProfile({})
+    setShowOnboarding(false)
+  }
+
+  const openEditProfile = () => {
+    setOnboardingName(profile?.name ?? '')
+    setOnboardingBusiness(profile?.businessType ?? '')
+    setShowOnboarding(true)
+    setSidebarOpen(false)
+  }
+
   const canSend = !loading && (!!input.trim() || !!attachment)
 
   return (
@@ -408,7 +479,7 @@ export default function ChatPage() {
           <PlusIcon size={16} />
           New chat
         </button>
-        <div style={{ flex: 1, overflowY: 'auto', padding: '0 0.4rem 1rem' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '0 0.4rem 0.5rem' }}>
           {conversations.length === 0 && (
             <p style={{ padding: '0.5rem 0.85rem', fontSize: '0.8rem', color: '#9a9690' }}>
               No saved chats yet.
@@ -442,6 +513,18 @@ export default function ChatPage() {
               </button>
             </div>
           ))}
+        </div>
+        <div style={{ borderTop: '1px solid #e4e0d8', padding: '0.75rem 1rem' }}>
+          <button
+            onClick={openEditProfile}
+            style={{
+              width: '100%', textAlign: 'left',
+              background: 'none', border: 'none', cursor: 'pointer',
+              fontSize: '0.8rem', color: '#6a6660', padding: '0.4rem 0',
+            }}
+          >
+            {profile?.name || profile?.businessType ? 'Edit profile' : 'Set up your profile'}
+          </button>
         </div>
       </aside>
 
@@ -624,6 +707,97 @@ export default function ChatPage() {
           </p>
         </div>
       </div>
+
+      {showOnboarding && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="onboarding-title"
+          style={{
+            position: 'fixed', inset: 0,
+            background: 'rgba(15, 14, 12, 0.45)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: '1rem', zIndex: 50,
+          }}
+        >
+          <div style={{
+            background: '#fff', borderRadius: '12px', maxWidth: '420px', width: '100%',
+            padding: '1.75rem', boxShadow: '0 20px 60px rgba(15, 14, 12, 0.25)',
+          }}>
+            <h2
+              id="onboarding-title"
+              style={{ fontFamily: 'Georgia, serif', fontSize: '1.4rem', fontWeight: 400, margin: 0, marginBottom: '0.4rem', color: '#0f0e0c' }}
+            >
+              Welcome to SmallBizzWizz
+            </h2>
+            <p style={{ fontSize: '0.9rem', color: '#6a6660', lineHeight: 1.5, margin: 0, marginBottom: '1.4rem' }}>
+              Two quick questions so I can give you tailored answers without you repeating yourself every time.
+            </p>
+
+            <label style={{ display: 'block', fontSize: '0.78rem', color: '#4a4740', marginBottom: '0.35rem' }}>
+              What should I call you?
+            </label>
+            <input
+              type="text"
+              value={onboardingName}
+              onChange={(e) => setOnboardingName(e.target.value)}
+              placeholder="Your first name"
+              maxLength={200}
+              style={{
+                width: '100%', padding: '0.65rem 0.85rem', marginBottom: '1rem',
+                border: '1px solid #e4e0d8', borderRadius: '8px',
+                fontSize: '0.9rem', fontFamily: 'inherit', outline: 'none',
+                background: '#f7f4ef', color: '#0f0e0c', boxSizing: 'border-box',
+              }}
+            />
+
+            <label style={{ display: 'block', fontSize: '0.78rem', color: '#4a4740', marginBottom: '0.35rem' }}>
+              What kind of business do you run?
+            </label>
+            <select
+              value={onboardingBusiness}
+              onChange={(e) => setOnboardingBusiness(e.target.value)}
+              style={{
+                width: '100%', padding: '0.65rem 0.85rem', marginBottom: '1.4rem',
+                border: '1px solid #e4e0d8', borderRadius: '8px',
+                fontSize: '0.9rem', fontFamily: 'inherit', outline: 'none',
+                background: '#f7f4ef', color: '#0f0e0c', boxSizing: 'border-box',
+                appearance: 'none',
+              }}
+            >
+              <option value="">Select an option…</option>
+              {BUSINESS_TYPE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+
+            <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', justifyContent: 'space-between' }}>
+              <button
+                onClick={handleOnboardingSkip}
+                disabled={savingProfile}
+                style={{
+                  background: 'none', border: 'none', cursor: savingProfile ? 'not-allowed' : 'pointer',
+                  fontSize: '0.85rem', color: '#8a8680', padding: '0.5rem 0',
+                }}
+              >
+                Skip for now
+              </button>
+              <button
+                onClick={handleOnboardingSave}
+                disabled={savingProfile}
+                style={{
+                  background: savingProfile ? '#e4e0d8' : '#c8410a',
+                  color: '#fff', border: 'none', borderRadius: '8px',
+                  padding: '0.65rem 1.4rem', fontSize: '0.88rem', fontWeight: 500,
+                  cursor: savingProfile ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {savingProfile ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       <style>{`
         @keyframes bounce {
