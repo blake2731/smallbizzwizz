@@ -1,12 +1,12 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { UserButton, useUser } from '@clerk/nextjs'
+import { UserButton } from '@clerk/nextjs'
 
 interface Message {
   role: 'user' | 'assistant'
   content: string
-  attachmentName?: string
+  attachmentName?: string | null
 }
 
 interface Attachment {
@@ -15,38 +15,10 @@ interface Attachment {
   data: string
 }
 
-interface Conversation {
+interface ConversationSummary {
   id: string
   title: string
-  updatedAt: number
-  messages: Message[]
-}
-
-function storageKey(userId: string | null | undefined) {
-  return userId ? `sbw_chats_${userId}` : null
-}
-
-function loadConversations(userId: string | null | undefined): Conversation[] {
-  const key = storageKey(userId)
-  if (!key) return []
-  try {
-    const raw = localStorage.getItem(key)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
-
-function persistConversations(userId: string | null | undefined, conversations: Conversation[]) {
-  const key = storageKey(userId)
-  if (!key) return
-  try {
-    localStorage.setItem(key, JSON.stringify(conversations))
-  } catch {
-    // localStorage full — silently drop
-  }
+  updatedAt: string
 }
 
 function PaperclipIcon({ size = 16 }: { size?: number }) {
@@ -229,14 +201,11 @@ function MarkdownContent({ text }: { text: string }) {
 }
 
 export default function ChatPage() {
-  const { user } = useUser()
-  const userId = user?.id ?? null
-
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [attachment, setAttachment] = useState<Attachment | null>(null)
   const [loading, setLoading] = useState(false)
-  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [conversations, setConversations] = useState<ConversationSummary[]>([])
   const [currentChatId, setCurrentChatId] = useState<string | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
@@ -244,39 +213,27 @@ export default function ChatPage() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
+  const refreshConversations = useCallback(async () => {
+    try {
+      const res = await fetch('/api/conversations')
+      if (!res.ok) return
+      const data = await res.json()
+      if (Array.isArray(data.conversations)) {
+        setConversations(data.conversations)
+      }
+    } catch {
+      // network error — leave existing list in place
+    }
+  }, [])
+
   useEffect(() => {
-    if (!userId) return
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    setConversations(loadConversations(userId))
-  }, [userId])
+    refreshConversations()
+  }, [refreshConversations])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages, loading])
-
-  const upsertConversation = useCallback((id: string, msgs: Message[]) => {
-    if (!userId || msgs.length === 0) return
-    setConversations(prev => {
-      const existing = prev.find(c => c.id === id)
-      let next: Conversation[]
-      if (existing) {
-        next = [
-          { ...existing, messages: msgs, updatedAt: Date.now() },
-          ...prev.filter(c => c.id !== id),
-        ]
-      } else {
-        const firstUser = msgs.find(m => m.role === 'user')
-        const titleSource = (firstUser?.content?.trim() || firstUser?.attachmentName || 'New chat')
-        const title = titleSource.length > 50 ? titleSource.slice(0, 50) + '…' : titleSource
-        next = [
-          { id, title, updatedAt: Date.now(), messages: msgs },
-          ...prev,
-        ]
-      }
-      persistConversations(userId, next)
-      return next
-    })
-  }, [userId])
 
   const handleTextareaInput = () => {
     const el = textareaRef.current
@@ -317,23 +274,19 @@ export default function ChatPage() {
       content: text,
       ...(attachment ? { attachmentName: attachment.name } : {}),
     }
-    const newMessages = [...messages, userMessage]
-    setMessages(newMessages)
+    const optimistic = [...messages, userMessage]
+    setMessages(optimistic)
     setInput('')
     const pendingAttachment = attachment
     setAttachment(null)
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
     setLoading(true)
 
-    let chatId = currentChatId
-    if (!chatId) {
-      chatId = crypto.randomUUID()
-      setCurrentChatId(chatId)
-    }
-    upsertConversation(chatId, newMessages)
-
     try {
-      const body: { messages: Message[]; attachment?: Attachment } = { messages: newMessages }
+      const body: { message: string; conversationId: string | null; attachment?: Attachment } = {
+        message: text,
+        conversationId: currentChatId,
+      }
       if (pendingAttachment) body.attachment = pendingAttachment
 
       const res = await fetch('/api/chat', {
@@ -342,14 +295,18 @@ export default function ChatPage() {
         body: JSON.stringify(body),
       })
 
+      if (!res.ok) {
+        throw new Error(`status ${res.status}`)
+      }
+
       const data = await res.json()
-      const finalMessages: Message[] = [...newMessages, { role: 'assistant', content: data.message }]
-      setMessages(finalMessages)
-      upsertConversation(chatId, finalMessages)
+      setMessages([...optimistic, { role: 'assistant', content: data.message }])
+      if (typeof data.conversationId === 'string') {
+        setCurrentChatId(data.conversationId)
+      }
+      refreshConversations()
     } catch {
-      const finalMessages: Message[] = [...newMessages, { role: 'assistant', content: 'Something went wrong. Please try again.' }]
-      setMessages(finalMessages)
-      upsertConversation(chatId, finalMessages)
+      setMessages([...optimistic, { role: 'assistant', content: 'Something went wrong. Please try again.' }])
     } finally {
       setLoading(false)
     }
@@ -371,28 +328,37 @@ export default function ChatPage() {
     setSidebarOpen(false)
   }
 
-  const loadChat = (id: string) => {
-    const conv = conversations.find(c => c.id === id)
-    if (!conv) return
-    setMessages(conv.messages)
-    setCurrentChatId(id)
-    setInput('')
-    setAttachment(null)
-    if (textareaRef.current) textareaRef.current.style.height = 'auto'
+  const loadChat = async (id: string) => {
     setSidebarOpen(false)
+    if (id === currentChatId) return
+    try {
+      const res = await fetch(`/api/conversations/${id}`)
+      if (!res.ok) return
+      const data = await res.json()
+      if (Array.isArray(data.messages)) {
+        setMessages(data.messages)
+        setCurrentChatId(id)
+        setInput('')
+        setAttachment(null)
+        if (textareaRef.current) textareaRef.current.style.height = 'auto'
+      }
+    } catch {
+      // ignore
+    }
   }
 
-  const deleteChat = (id: string, e: React.MouseEvent) => {
+  const deleteChat = async (id: string, e: React.MouseEvent) => {
     e.stopPropagation()
-    if (!userId) return
-    setConversations(prev => {
-      const next = prev.filter(c => c.id !== id)
-      persistConversations(userId, next)
-      return next
-    })
+    setConversations(prev => prev.filter(c => c.id !== id))
     if (currentChatId === id) {
       setMessages([])
       setCurrentChatId(null)
+    }
+    try {
+      await fetch(`/api/conversations/${id}`, { method: 'DELETE' })
+    } catch {
+      // if delete failed, refresh list to recover the row
+      refreshConversations()
     }
   }
 

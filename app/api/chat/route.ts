@@ -1,6 +1,8 @@
 import { auth, currentUser } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
+import { and, asc, eq } from 'drizzle-orm'
+import { db, conversation, message } from '@/lib/db'
 
 const client = new Anthropic()
 
@@ -38,6 +40,17 @@ type ContentBlock =
   | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } }
   | { type: 'document'; source: { type: 'base64'; media_type: 'application/pdf'; data: string } }
 
+type Attachment = {
+  name: string
+  mediaType: string
+  data: string
+}
+
+function deriveTitle(userMessage: string, attachmentName: string | null): string {
+  const source = userMessage.trim() || attachmentName || 'New chat'
+  return source.length > 50 ? source.slice(0, 50) + '…' : source
+}
+
 export async function POST(req: NextRequest) {
   const { userId } = await auth()
   if (!userId) {
@@ -49,10 +62,13 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Subscription required' }, { status: 403 })
   }
 
-  const { messages, attachment } = await req.json()
+  const body = await req.json()
+  const userMessage: string = typeof body?.message === 'string' ? body.message : ''
+  const incomingConvId: string | null = typeof body?.conversationId === 'string' ? body.conversationId : null
+  const attachment: Attachment | undefined = body?.attachment
 
-  if (!messages || !Array.isArray(messages)) {
-    return NextResponse.json({ error: 'Invalid messages' }, { status: 400 })
+  if (!userMessage.trim() && !attachment) {
+    return NextResponse.json({ error: 'Empty message' }, { status: 400 })
   }
 
   if (attachment) {
@@ -65,10 +81,46 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  const claudeMessages = messages.map((m: { role: string; content: string }, i: number) => {
-    if (i === messages.length - 1 && attachment && m.role === 'user') {
-      const content: ContentBlock[] = []
+  let convId: string
+  if (incomingConvId) {
+    const [existing] = await db
+      .select({ id: conversation.id })
+      .from(conversation)
+      .where(and(eq(conversation.id, incomingConvId), eq(conversation.userId, userId)))
+      .limit(1)
+    if (!existing) {
+      return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
+    }
+    convId = existing.id
+  } else {
+    const title = deriveTitle(userMessage, attachment?.name ?? null)
+    const [created] = await db
+      .insert(conversation)
+      .values({ userId, title })
+      .returning({ id: conversation.id })
+    convId = created.id
+  }
 
+  await db.insert(message).values({
+    conversationId: convId,
+    role: 'user',
+    content: userMessage,
+    attachmentName: attachment?.name ?? null,
+  })
+
+  const dbMessages = await db
+    .select({
+      role: message.role,
+      content: message.content,
+    })
+    .from(message)
+    .where(eq(message.conversationId, convId))
+    .orderBy(asc(message.createdAt))
+
+  const claudeMessages = dbMessages.map((m, i) => {
+    const isLast = i === dbMessages.length - 1
+    if (isLast && attachment && m.role === 'user') {
+      const content: ContentBlock[] = []
       if (attachment.mediaType === 'application/pdf') {
         content.push({
           type: 'document',
@@ -80,12 +132,10 @@ export async function POST(req: NextRequest) {
           source: { type: 'base64', media_type: attachment.mediaType, data: attachment.data },
         })
       }
-
       content.push({ type: 'text', text: m.content || 'Please review this document.' })
       return { role: 'user' as const, content }
     }
-
-    return { role: m.role as 'user' | 'assistant', content: m.content }
+    return { role: m.role, content: m.content }
   })
 
   const response = await client.messages.create({
@@ -97,5 +147,17 @@ export async function POST(req: NextRequest) {
   })
 
   const text = response.content[0].type === 'text' ? response.content[0].text : ''
-  return NextResponse.json({ message: text })
+
+  await db.insert(message).values({
+    conversationId: convId,
+    role: 'assistant',
+    content: text,
+  })
+
+  await db
+    .update(conversation)
+    .set({ updatedAt: new Date() })
+    .where(eq(conversation.id, convId))
+
+  return NextResponse.json({ message: text, conversationId: convId })
 }
