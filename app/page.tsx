@@ -1,3 +1,4 @@
+import Image from 'next/image'
 import Link from 'next/link'
 import { auth } from '@clerk/nextjs/server'
 import { redirect } from 'next/navigation'
@@ -54,7 +55,15 @@ export default async function HomePage() {
       </nav>
 
       {/* Hero */}
-      <section style={{ maxWidth: '760px', margin: '0 auto', padding: '5rem 2rem 4rem', textAlign: 'center' }}>
+      <section style={{ maxWidth: '760px', margin: '0 auto', padding: '4rem 2rem 4rem', textAlign: 'center' }}>
+        <Image
+          src="/sbw.png"
+          alt="SmallBizzWizz — AI Business Advisor"
+          width={282}
+          height={143}
+          priority
+          style={{ width: '220px', height: 'auto', margin: '0 auto 2rem', display: 'block' }}
+        />
         <h1 style={{ fontFamily: 'Georgia, serif', fontSize: 'clamp(2rem, 5vw, 3.25rem)', fontWeight: 400, lineHeight: 1.2, marginBottom: '1.25rem', color: '#0f0e0c' }}>
           The business-savvy friend<br />you never had
         </h1>
