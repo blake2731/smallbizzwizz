@@ -65,15 +65,15 @@ export default async function HomePage() {
           style={{ width: '220px', height: 'auto', margin: '0 auto 2rem', display: 'block' }}
         />
         <h1 style={{ fontFamily: 'Georgia, serif', fontSize: 'clamp(2rem, 5vw, 3.25rem)', fontWeight: 400, lineHeight: 1.2, marginBottom: '1.25rem', color: '#0f0e0c' }}>
-          The business-savvy friend<br />you never had
+          Running a business shouldn&apos;t feel this lonely.
         </h1>
         <p style={{ fontSize: '1.1rem', color: '#6b6760', lineHeight: 1.7, maxWidth: '560px', margin: '0 auto 2.5rem' }}>
-          Ask anything about your business — pricing, deals, contracts, clients, hiring. Get a straight answer in plain English. No hedging, no jargon, no "it depends."
+          A business advisor that knows your industry and stays on-topic — no jargon, no hedging, no 15-paragraph hedged answer.
         </p>
         <Link href="/sign-up" style={{ display: 'inline-block', background: '#c8410a', color: '#fff', padding: '0.875rem 2rem', borderRadius: '6px', fontSize: '1rem', fontWeight: 500, textDecoration: 'none' }}>
           Start free 7-day trial →
         </Link>
-        <p style={{ marginTop: '0.875rem', fontSize: '0.8rem', color: '#8a8680' }}>No charge for 7 days. Cancel anytime.</p>
+        <p style={{ marginTop: '0.875rem', fontSize: '0.8rem', color: '#8a8680' }}>7 days on us. If it&apos;s not worth $19, walk away.</p>
       </section>
 
       {/* Chat preview */}
@@ -134,6 +134,16 @@ export default async function HomePage() {
             ))}
           </div>
         </div>
+      </section>
+
+      {/* Why not ChatGPT */}
+      <section style={{ maxWidth: '680px', margin: '0 auto', padding: '5rem 2rem 0', textAlign: 'center' }}>
+        <h2 style={{ fontFamily: 'Georgia, serif', fontSize: '1.75rem', fontWeight: 400, marginBottom: '1.25rem' }}>
+          Why not just use ChatGPT?
+        </h2>
+        <p style={{ fontSize: '1.05rem', color: '#4a4740', lineHeight: 1.7, maxWidth: '560px', margin: '0 auto' }}>
+          Honestly? If you want to copy-paste your industry, your situation, and &apos;be direct, no hedging&apos; into ChatGPT every single time — go for it. We&apos;ve already done that part. You just ask the question.
+        </p>
       </section>
 
       {/* Pricing */}
