@@ -1,9 +1,13 @@
-import { pgTable, text, timestamp, uuid, index } from 'drizzle-orm/pg-core'
+import { pgTable, text, timestamp, uuid, index, boolean } from 'drizzle-orm/pg-core'
 
 export const profile = pgTable('profile', {
   userId: text('user_id').primaryKey(),
   name: text('name'),
   businessType: text('business_type'),
+  businessDuration: text('business_duration'),
+  teamSize: text('team_size'),
+  biggestStressor: text('biggest_stressor'),
+  onboardingCompleted: boolean('onboarding_completed').default(false).notNull(),
   onboardedAt: timestamp('onboarded_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
 })

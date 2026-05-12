@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { UserButton } from '@clerk/nextjs'
 import { BUSINESS_TYPE_OPTIONS } from '@/lib/business-types'
+import { OnboardingFlow, type OnboardingAnswers } from './Onboarding'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -25,6 +26,10 @@ interface ConversationSummary {
 interface Profile {
   name: string | null
   businessType: string | null
+  businessDuration: string | null
+  teamSize: string | null
+  biggestStressor: string | null
+  onboardingCompleted: boolean
   onboardedAt: string | null
 }
 
@@ -217,9 +222,11 @@ export default function ChatPage() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
 
   const [profile, setProfile] = useState<Profile | null>(null)
+  const [profileLoaded, setProfileLoaded] = useState(false)
   const [showOnboarding, setShowOnboarding] = useState(false)
-  const [onboardingName, setOnboardingName] = useState('')
-  const [onboardingBusiness, setOnboardingBusiness] = useState('')
+  const [showEditModal, setShowEditModal] = useState(false)
+  const [editName, setEditName] = useState('')
+  const [editBusiness, setEditBusiness] = useState('')
   const [savingProfile, setSavingProfile] = useState(false)
 
   const bottomRef = useRef<HTMLDivElement>(null)
@@ -249,15 +256,15 @@ export default function ChatPage() {
     fetch('/api/profile')
       .then((res) => (res.ok ? res.json() : null))
       .then((data: Profile | null) => {
-        if (cancelled || !data) return
+        if (cancelled) return
+        setProfileLoaded(true)
+        if (!data) return
         setProfile(data)
-        if (!data.onboardedAt) {
-          setOnboardingName(data.name ?? '')
-          setOnboardingBusiness(data.businessType ?? '')
-          setShowOnboarding(true)
-        }
+        if (!data.onboardingCompleted) setShowOnboarding(true)
       })
-      .catch(() => {})
+      .catch(() => {
+        if (!cancelled) setProfileLoaded(true)
+      })
     return () => {
       cancelled = true
     }
@@ -297,27 +304,25 @@ export default function ChatPage() {
     reader.readAsDataURL(file)
   }
 
-  const send = async () => {
-    const text = input.trim()
-    if ((!text && !attachment) || loading) return
-
+  const sendMessage = async (
+    text: string,
+    pendingAttachment: Attachment | null,
+    baseMessages: Message[],
+    conversationId: string | null,
+  ) => {
     const userMessage: Message = {
       role: 'user',
       content: text,
-      ...(attachment ? { attachmentName: attachment.name } : {}),
+      ...(pendingAttachment ? { attachmentName: pendingAttachment.name } : {}),
     }
-    const optimistic = [...messages, userMessage]
+    const optimistic = [...baseMessages, userMessage]
     setMessages(optimistic)
-    setInput('')
-    const pendingAttachment = attachment
-    setAttachment(null)
-    if (textareaRef.current) textareaRef.current.style.height = 'auto'
     setLoading(true)
 
     try {
       const body: { message: string; conversationId: string | null; attachment?: Attachment } = {
         message: text,
-        conversationId: currentChatId,
+        conversationId,
       }
       if (pendingAttachment) body.attachment = pendingAttachment
 
@@ -327,9 +332,7 @@ export default function ChatPage() {
         body: JSON.stringify(body),
       })
 
-      if (!res.ok) {
-        throw new Error(`status ${res.status}`)
-      }
+      if (!res.ok) throw new Error(`status ${res.status}`)
 
       const data = await res.json()
       setMessages([...optimistic, { role: 'assistant', content: data.message }])
@@ -342,6 +345,18 @@ export default function ChatPage() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const send = async () => {
+    const text = input.trim()
+    if ((!text && !attachment) || loading) return
+
+    const pendingAttachment = attachment
+    setInput('')
+    setAttachment(null)
+    if (textareaRef.current) textareaRef.current.style.height = 'auto'
+
+    await sendMessage(text, pendingAttachment, messages, currentChatId)
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -389,12 +404,18 @@ export default function ChatPage() {
     try {
       await fetch(`/api/conversations/${id}`, { method: 'DELETE' })
     } catch {
-      // if delete failed, refresh list to recover the row
       refreshConversations()
     }
   }
 
-  const saveProfile = async (payload: { name?: string; businessType?: string }) => {
+  const saveProfile = async (payload: Partial<{
+    name: string
+    businessType: string
+    businessDuration: string
+    teamSize: string
+    biggestStressor: string
+    onboardingCompleted: boolean
+  }>) => {
     setSavingProfile(true)
     try {
       const res = await fetch('/api/profile', {
@@ -407,33 +428,49 @@ export default function ChatPage() {
         setProfile(data)
       }
     } catch {
-      // network error — leave modal open so user can retry
+      // network error — caller can retry
     } finally {
       setSavingProfile(false)
     }
   }
 
-  const handleOnboardingSave = async () => {
+  const handleOnboardingComplete = async (answers: OnboardingAnswers) => {
     await saveProfile({
-      name: onboardingName.trim(),
-      businessType: onboardingBusiness,
+      name: answers.name,
+      businessType: answers.businessType,
+      businessDuration: answers.businessDuration,
+      teamSize: answers.teamSize,
+      biggestStressor: answers.biggestStressor,
+      onboardingCompleted: true,
     })
     setShowOnboarding(false)
+    await sendMessage(answers.biggestStressor, null, [], null)
   }
 
-  const handleOnboardingSkip = async () => {
-    await saveProfile({})
-    setShowOnboarding(false)
+  const handleEditSave = async () => {
+    await saveProfile({
+      name: editName.trim(),
+      businessType: editBusiness,
+    })
+    setShowEditModal(false)
   }
 
   const openEditProfile = () => {
-    setOnboardingName(profile?.name ?? '')
-    setOnboardingBusiness(profile?.businessType ?? '')
-    setShowOnboarding(true)
+    setEditName(profile?.name ?? '')
+    setEditBusiness(profile?.businessType ?? '')
+    setShowEditModal(true)
     setSidebarOpen(false)
   }
 
   const canSend = !loading && (!!input.trim() || !!attachment)
+
+  if (!profileLoaded) {
+    return <div style={{ height: '100vh', background: '#f7f4ef' }} />
+  }
+
+  if (showOnboarding) {
+    return <OnboardingFlow onComplete={handleOnboardingComplete} />
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', background: '#f7f4ef', fontFamily: "'DM Sans', sans-serif" }}>
@@ -564,28 +601,12 @@ export default function ChatPage() {
 
           {messages.length === 0 && (
             <div style={{ textAlign: 'center', paddingTop: '4rem' }}>
-              <p style={{ fontFamily: 'Georgia, serif', fontSize: '1.75rem', color: '#0f0e0c', marginBottom: '0.75rem' }}>
-                What&apos;s on your mind?
+              <p style={{ fontFamily: 'Georgia, serif', fontSize: '1.6rem', color: '#0f0e0c', marginBottom: '0.75rem', lineHeight: 1.4 }}>
+                {profile?.name ? `Hey ${profile.name.split(/\s+/)[0]} — ` : ''}what&apos;s the biggest thing stressing you out about your business right now?
               </p>
-              <p style={{ fontSize: '0.95rem', color: '#8a8680', marginBottom: '2.5rem' }}>
-                Ask anything about your business — deals, pricing, clients, contracts, hiring.
+              <p style={{ fontSize: '0.95rem', color: '#8a8680' }}>
+                Or ask me anything else — pricing, clients, contracts, hiring.
               </p>
-              <div className="suggested-questions" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', textAlign: 'left' }}>
-                {[
-                  'Is this business deal fair or am I being taken advantage of?',
-                  'What should I charge for my services?',
-                  "My client hasn't paid in 60 days. What do I do?",
-                  'Should I hire someone or keep doing it myself?',
-                ].map((q) => (
-                  <button
-                    key={q}
-                    onClick={() => setInput(q)}
-                    style={{ background: '#fff', border: '1px solid #e4e0d8', borderRadius: '4px', padding: '0.85rem 1rem', fontSize: '0.82rem', color: '#4a4740', cursor: 'pointer', textAlign: 'left', lineHeight: '1.5' }}
-                  >
-                    {q}
-                  </button>
-                ))}
-              </div>
             </div>
           )}
 
@@ -708,11 +729,11 @@ export default function ChatPage() {
         </div>
       </div>
 
-      {showOnboarding && (
+      {showEditModal && (
         <div
           role="dialog"
           aria-modal="true"
-          aria-labelledby="onboarding-title"
+          aria-labelledby="edit-profile-title"
           style={{
             position: 'fixed', inset: 0,
             background: 'rgba(15, 14, 12, 0.45)',
@@ -725,13 +746,13 @@ export default function ChatPage() {
             padding: '1.75rem', boxShadow: '0 20px 60px rgba(15, 14, 12, 0.25)',
           }}>
             <h2
-              id="onboarding-title"
+              id="edit-profile-title"
               style={{ fontFamily: 'Georgia, serif', fontSize: '1.4rem', fontWeight: 400, margin: 0, marginBottom: '0.4rem', color: '#0f0e0c' }}
             >
-              Welcome to SmallBizzWizz
+              Edit your profile
             </h2>
             <p style={{ fontSize: '0.9rem', color: '#6a6660', lineHeight: 1.5, margin: 0, marginBottom: '1.4rem' }}>
-              Two quick questions so I can give you tailored answers without you repeating yourself every time.
+              Quick edits to what I should call you and the kind of business you run.
             </p>
 
             <label style={{ display: 'block', fontSize: '0.78rem', color: '#4a4740', marginBottom: '0.35rem' }}>
@@ -739,8 +760,8 @@ export default function ChatPage() {
             </label>
             <input
               type="text"
-              value={onboardingName}
-              onChange={(e) => setOnboardingName(e.target.value)}
+              value={editName}
+              onChange={(e) => setEditName(e.target.value)}
               placeholder="Your first name"
               maxLength={200}
               style={{
@@ -755,8 +776,8 @@ export default function ChatPage() {
               What kind of business do you run?
             </label>
             <select
-              value={onboardingBusiness}
-              onChange={(e) => setOnboardingBusiness(e.target.value)}
+              value={editBusiness}
+              onChange={(e) => setEditBusiness(e.target.value)}
               style={{
                 width: '100%', padding: '0.65rem 0.85rem', marginBottom: '1.4rem',
                 border: '1px solid #e4e0d8', borderRadius: '8px',
@@ -769,21 +790,24 @@ export default function ChatPage() {
               {BUSINESS_TYPE_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>{opt.label}</option>
               ))}
+              {profile?.businessType && !BUSINESS_TYPE_OPTIONS.some(o => o.value === profile.businessType) && (
+                <option value={profile.businessType}>{profile.businessType}</option>
+              )}
             </select>
 
-            <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', justifyContent: 'space-between' }}>
+            <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center', justifyContent: 'flex-end' }}>
               <button
-                onClick={handleOnboardingSkip}
+                onClick={() => setShowEditModal(false)}
                 disabled={savingProfile}
                 style={{
                   background: 'none', border: 'none', cursor: savingProfile ? 'not-allowed' : 'pointer',
-                  fontSize: '0.85rem', color: '#8a8680', padding: '0.5rem 0',
+                  fontSize: '0.85rem', color: '#8a8680', padding: '0.5rem 0.9rem',
                 }}
               >
-                Skip for now
+                Cancel
               </button>
               <button
-                onClick={handleOnboardingSave}
+                onClick={handleEditSave}
                 disabled={savingProfile}
                 style={{
                   background: savingProfile ? '#e4e0d8' : '#c8410a',

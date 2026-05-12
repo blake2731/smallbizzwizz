@@ -54,7 +54,13 @@ function deriveTitle(userMessage: string, attachmentName: string | null): string
 
 async function buildSystemPrompt(userId: string): Promise<string> {
   const [row] = await db
-    .select({ name: profile.name, businessType: profile.businessType })
+    .select({
+      name: profile.name,
+      businessType: profile.businessType,
+      businessDuration: profile.businessDuration,
+      teamSize: profile.teamSize,
+      biggestStressor: profile.biggestStressor,
+    })
     .from(profile)
     .where(eq(profile.userId, userId))
     .limit(1)
@@ -64,6 +70,9 @@ async function buildSystemPrompt(userId: string): Promise<string> {
   const profileLines: string[] = []
   if (row.name) profileLines.push(`User's name: ${row.name}`)
   if (row.businessType) profileLines.push(`Business type: ${row.businessType}`)
+  if (row.businessDuration) profileLines.push(`How long they've run it: ${row.businessDuration}`)
+  if (row.teamSize) profileLines.push(`Team situation: ${row.teamSize}`)
+  if (row.biggestStressor) profileLines.push(`What they first told me was stressing them out: ${row.biggestStressor}`)
 
   let augmented = SYSTEM_PROMPT
   if (profileLines.length > 0) {
