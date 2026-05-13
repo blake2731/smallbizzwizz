@@ -1,6 +1,9 @@
 import type { Metadata, Viewport } from 'next'
 import { ClerkProvider } from '@clerk/nextjs'
+import Script from 'next/script'
 import './globals.css'
+
+const GA_MEASUREMENT_ID = 'G-MEE10S53ZR'
 
 export const metadata: Metadata = {
   title: 'SmallBizzWizz — AI Business Advisor for Small Business Owners',
@@ -72,6 +75,20 @@ export default function RootLayout({
   return (
     <ClerkProvider afterSignOutUrl="/">
       <html lang="en">
+        <head>
+          <Script
+            src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
+            strategy="afterInteractive"
+          />
+          <Script id="google-analytics" strategy="afterInteractive">
+            {`
+              window.dataLayer = window.dataLayer || [];
+              function gtag(){dataLayer.push(arguments);}
+              gtag('js', new Date());
+              gtag('config', '${GA_MEASUREMENT_ID}');
+            `}
+          </Script>
+        </head>
         <body suppressHydrationWarning>{children}</body>
       </html>
     </ClerkProvider>
