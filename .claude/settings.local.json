@@ -2,7 +2,10 @@
   "permissions": {
     "allow": [
       "PowerShell(Get-Process *)",
-      "Bash(claude doctor *)"
+      "Bash(claude doctor *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)"
     ]
   }
 }
