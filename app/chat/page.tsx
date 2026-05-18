@@ -720,7 +720,7 @@ export default function ChatPage() {
             type="file"
             ref={fileInputRef}
             style={{ display: 'none' }}
-            accept="application/pdf,image/png,image/jpeg,image/gif,image/webp"
+            accept=".xlsx,.xls,.csv,application/pdf,image/png,image/jpeg,image/gif,image/webp"
             onChange={handleFileChange}
           />
           <p style={{ textAlign: 'center', fontSize: '0.72rem', color: '#8a8680', marginTop: '0.5rem' }}>
