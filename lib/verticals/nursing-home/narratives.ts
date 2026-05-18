@@ -894,6 +894,7 @@ export async function generateExecutiveNarrative(
       model: MODEL_NAME,
       max_tokens: config.maxTokens,
       temperature: 0.2,
+      cache_control: { type: "ephemeral" },
       system: NARRATIVE_SYSTEM_PROMPT,
       messages: [
         {

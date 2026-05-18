@@ -231,6 +231,7 @@ export async function POST(req: NextRequest) {
   const response = await client.messages.create({
     model: 'claude-sonnet-4-6',
     max_tokens: 2048,
+    cache_control: { type: 'ephemeral' },
     system: systemPrompt,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     messages: claudeMessages as any,
