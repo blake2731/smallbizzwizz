@@ -30,8 +30,9 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
+# environment variables
 .env*
+!.env.example
 
 # vercel
 .vercel
@@ -39,3 +40,26 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# uploaded business documents
+*.xlsx
+*.xls
+*.xlsm
+*.csv
+
+# local upload/temp folders
+/uploads
+/tmp
+/temp
+
+# local databases
+*.sqlite
+*.db
+
+# OS/editor junk
+Thumbs.db
+.vscode/
+.idea/
+
+# logs
+*.log
