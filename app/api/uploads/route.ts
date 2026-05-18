@@ -36,7 +36,7 @@ export async function POST(request: Request) {
   if (!isAcceptedWorkbook(workbook)) {
     return redirectToUploadError(
       request,
-      "Upload an .xlsx or .xlsm workbook export."
+      `${workbook.name} is not a supported workbook. The deterministic facility parser needs .xlsx or .xlsm (it relies on outline level, bold, and fill formatting that .xls and .csv strip out). Re-save from Excel as .xlsx and try again, or use the chat for general spreadsheet questions.`
     )
   }
 

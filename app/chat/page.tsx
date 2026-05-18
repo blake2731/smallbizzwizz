@@ -133,6 +133,60 @@ function CloseIcon({ size = 18 }: { size?: number }) {
   )
 }
 
+const MIME_BY_EXTENSION: Record<string, string> = {
+  pdf: 'application/pdf',
+  png: 'image/png',
+  jpg: 'image/jpeg',
+  jpeg: 'image/jpeg',
+  gif: 'image/gif',
+  webp: 'image/webp',
+  xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  xlsm: 'application/vnd.ms-excel.sheet.macroEnabled.12',
+  xls: 'application/vnd.ms-excel',
+  csv: 'text/csv',
+}
+
+const ALLOWED_MIME_TYPES = new Set(Object.values(MIME_BY_EXTENSION))
+
+function resolveAttachmentType(file: File): string | null {
+  if (file.type && ALLOWED_MIME_TYPES.has(file.type)) return file.type
+  const ext = file.name.toLowerCase().split('.').pop() ?? ''
+  return MIME_BY_EXTENSION[ext] ?? null
+}
+
+function attachmentKind(mediaType: string): 'pdf' | 'image' | 'spreadsheet' {
+  if (mediaType === 'application/pdf') return 'pdf'
+  if (mediaType.startsWith('image/')) return 'image'
+  return 'spreadsheet'
+}
+
+function AttachmentIcon({ kind, size = 14 }: { kind: 'pdf' | 'image' | 'spreadsheet'; size?: number }) {
+  if (kind === 'pdf') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+        <polyline points="14 2 14 8 20 8" />
+        <path d="M9 13h6M9 17h4" />
+      </svg>
+    )
+  }
+  if (kind === 'image') {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        <rect x="3" y="3" width="18" height="18" rx="2" />
+        <circle cx="9" cy="9" r="2" />
+        <path d="m21 15-5-5L5 21" />
+      </svg>
+    )
+  }
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+      <path d="M3 9h18M3 15h18M9 3v18M15 3v18" />
+    </svg>
+  )
+}
+
 function InlineText({ text }: { text: string }) {
   const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g)
   return (
@@ -286,9 +340,11 @@ export default function ChatPage() {
     e.target.value = ''
     if (!file) return
 
-    const allowed = ['application/pdf', 'image/png', 'image/jpeg', 'image/gif', 'image/webp']
-    if (!allowed.includes(file.type)) {
-      alert('Unsupported file type. Please upload a PDF or image (PNG, JPG, GIF, WEBP).')
+    const resolved = resolveAttachmentType(file)
+    if (!resolved) {
+      alert(
+        'Unsupported file type. Supported: PDF, images (PNG, JPG, GIF, WEBP), and spreadsheets (XLSX, XLS, CSV).'
+      )
       return
     }
     if (file.size > 10 * 1024 * 1024) {
@@ -299,7 +355,7 @@ export default function ChatPage() {
     const reader = new FileReader()
     reader.onload = () => {
       const base64 = (reader.result as string).split(',')[1]
-      setAttachment({ name: file.name, mediaType: file.type, data: base64 })
+      setAttachment({ name: file.name, mediaType: resolved, data: base64 })
     }
     reader.readAsDataURL(file)
   }
@@ -607,6 +663,9 @@ export default function ChatPage() {
               <p style={{ fontSize: '0.95rem', color: '#8a8680' }}>
                 Or ask me anything else — pricing, clients, contracts, hiring.
               </p>
+              <p style={{ fontSize: '0.85rem', color: '#9a9690', marginTop: '0.5rem' }}>
+                Drop in a contract, receipt photo, or your books (XLSX / XLS / CSV) and I&apos;ll read it before answering.
+              </p>
             </div>
           )}
 
@@ -626,7 +685,7 @@ export default function ChatPage() {
                   <>
                     {m.attachmentName && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: m.content ? '0.5rem' : 0, fontSize: '0.78rem', color: '#9a9690', background: '#1a1917', borderRadius: '4px', padding: '0.3rem 0.5rem' }}>
-                        <PaperclipIcon size={13} />
+                        <AttachmentIcon kind={attachmentKind(MIME_BY_EXTENSION[(m.attachmentName.split('.').pop() ?? '').toLowerCase()] ?? '')} size={13} />
                         <span style={{ maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.attachmentName}</span>
                       </div>
                     )}
@@ -662,13 +721,19 @@ export default function ChatPage() {
       <div style={{ borderTop: '1px solid #e4e0d8', background: '#fff', padding: '1rem 1.5rem' }}>
         <div style={{ maxWidth: '680px', margin: '0 auto' }}>
           {attachment && (
-            <div style={{ marginBottom: '0.5rem', display: 'inline-flex', alignItems: 'center', gap: '0.45rem', background: '#f7f4ef', border: '1px solid #e4e0d8', borderRadius: '6px', padding: '0.3rem 0.5rem 0.3rem 0.6rem', fontSize: '0.8rem', color: '#4a4740' }}>
-              <PaperclipIcon size={14} />
-              <span style={{ maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ marginBottom: '0.5rem', display: 'inline-flex', alignItems: 'center', gap: '0.5rem', background: '#fff', border: '1px solid #e4e0d8', borderRadius: '8px', padding: '0.4rem 0.55rem 0.4rem 0.6rem', fontSize: '0.82rem', color: '#2a2724', boxShadow: '0 1px 0 rgba(15, 14, 12, 0.03)' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 26, height: 26, borderRadius: 6, background: attachmentKind(attachment.mediaType) === 'spreadsheet' ? '#e8f3ec' : attachmentKind(attachment.mediaType) === 'pdf' ? '#fbe7e1' : '#eef0f5', color: attachmentKind(attachment.mediaType) === 'spreadsheet' ? '#1e7a3f' : attachmentKind(attachment.mediaType) === 'pdf' ? '#b1340a' : '#4a4740' }}>
+                <AttachmentIcon kind={attachmentKind(attachment.mediaType)} size={14} />
+              </span>
+              <span style={{ maxWidth: '220px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 500 }}>
                 {attachment.name}
+              </span>
+              <span style={{ fontSize: '0.7rem', color: '#8a8680', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                {attachmentKind(attachment.mediaType)}
               </span>
               <button
                 onClick={() => setAttachment(null)}
+                aria-label="Remove attachment"
                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8a8680', fontSize: '1.1rem', lineHeight: 1, padding: '0 0 0 0.2rem' }}
               >
                 ×
@@ -678,7 +743,7 @@ export default function ChatPage() {
           <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'flex-end' }}>
             <button
               onClick={() => fileInputRef.current?.click()}
-              title="Attach a file (PDF or image, max 10MB)"
+              title="Attach a PDF, image, or spreadsheet (XLSX, XLS, CSV) — 10MB max"
               aria-label="Attach a file"
               style={{
                 background: 'none', border: '1px solid #e4e0d8', borderRadius: '8px',
@@ -724,7 +789,7 @@ export default function ChatPage() {
             onChange={handleFileChange}
           />
           <p style={{ textAlign: 'center', fontSize: '0.72rem', color: '#8a8680', marginTop: '0.5rem' }}>
-            Press Enter to send · Shift+Enter for new line · attach contracts or images
+            Enter to send · Shift+Enter for new line · attach <strong style={{ color: '#4a4740', fontWeight: 600 }}>PDF, images, or spreadsheets</strong> (XLSX, XLS, CSV)
           </p>
         </div>
       </div>

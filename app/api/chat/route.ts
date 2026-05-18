@@ -2,6 +2,7 @@ import { auth, currentUser } from '@clerk/nextjs/server'
 import { NextRequest, NextResponse } from 'next/server'
 import Anthropic from '@anthropic-ai/sdk'
 import { and, asc, eq } from 'drizzle-orm'
+import * as XLSX from 'xlsx'
 import { db, conversation, message, profile } from '@/lib/db'
 import { BUSINESS_CONTEXTS } from '@/lib/industry-contexts'
 
@@ -28,16 +29,28 @@ Tone: smart friend who has built and sold businesses. Warm but not soft. Confide
 
 Limits: not a licensed attorney/accountant — flag when a professional is essential, but still give your read first.`
 
+const SPREADSHEET_MIME_TYPES = new Set([
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  'application/vnd.ms-excel.sheet.macroEnabled.12',
+  'application/vnd.ms-excel',
+  'text/csv',
+])
+
+const IMAGE_MIME_TYPES = new Set([
+  'image/png',
+  'image/jpeg',
+  'image/gif',
+  'image/webp',
+])
+
 const allowedTypes = [
-  "application/pdf",
-  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-  "application/vnd.ms-excel",
-  "text/csv",
-  "image/png",
-  "image/jpeg",
-  "image/gif",
-  "image/webp",
-];
+  'application/pdf',
+  ...SPREADSHEET_MIME_TYPES,
+  ...IMAGE_MIME_TYPES,
+]
+
+// Trimmed to keep the prompt within reasonable token budgets.
+const SPREADSHEET_TEXT_LIMIT = 60_000
 
 type ContentBlock =
   | { type: 'text'; text: string }
@@ -48,6 +61,38 @@ type Attachment = {
   name: string
   mediaType: string
   data: string
+}
+
+function spreadsheetToText(base64: string, fileName: string): string {
+  try {
+    const buffer = Buffer.from(base64, 'base64')
+    const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true })
+    const sections: string[] = []
+
+    for (const sheetName of workbook.SheetNames) {
+      const sheet = workbook.Sheets[sheetName]
+      if (!sheet) continue
+      const csv = XLSX.utils.sheet_to_csv(sheet, { blankrows: false }).trim()
+      if (!csv) continue
+      sections.push(`=== Sheet: ${sheetName} ===\n${csv}`)
+    }
+
+    if (sections.length === 0) {
+      return `[Spreadsheet attachment: ${fileName} — file was empty or unreadable.]`
+    }
+
+    let body = sections.join('\n\n')
+    let truncated = false
+    if (body.length > SPREADSHEET_TEXT_LIMIT) {
+      body = body.slice(0, SPREADSHEET_TEXT_LIMIT)
+      truncated = true
+    }
+
+    const header = `[Spreadsheet attachment: ${fileName}${truncated ? ' — truncated for length' : ''}]`
+    return `${header}\n\n${body}`
+  } catch (error) {
+    return `[Spreadsheet attachment: ${fileName} — failed to parse (${error instanceof Error ? error.message : 'unknown error'}).]`
+  }
 }
 
 function deriveTitle(userMessage: string, attachmentName: string | null): string {
@@ -162,13 +207,20 @@ export async function POST(req: NextRequest) {
           type: 'document',
           source: { type: 'base64', media_type: 'application/pdf', data: attachment.data },
         })
-      } else {
+        content.push({ type: 'text', text: m.content || 'Please review this document.' })
+      } else if (IMAGE_MIME_TYPES.has(attachment.mediaType)) {
         content.push({
           type: 'image',
           source: { type: 'base64', media_type: attachment.mediaType, data: attachment.data },
         })
+        content.push({ type: 'text', text: m.content || 'Please review this image.' })
+      } else if (SPREADSHEET_MIME_TYPES.has(attachment.mediaType)) {
+        const sheetText = spreadsheetToText(attachment.data, attachment.name)
+        const userText = m.content || 'Please review this spreadsheet.'
+        content.push({ type: 'text', text: `${sheetText}\n\n---\n\n${userText}` })
+      } else {
+        content.push({ type: 'text', text: m.content })
       }
-      content.push({ type: 'text', text: m.content || 'Please review this document.' })
       return { role: 'user' as const, content }
     }
     return { role: m.role, content: m.content }
