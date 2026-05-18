@@ -28,13 +28,16 @@ Tone: smart friend who has built and sold businesses. Warm but not soft. Confide
 
 Limits: not a licensed attorney/accountant — flag when a professional is essential, but still give your read first.`
 
-const ALLOWED_MEDIA_TYPES = new Set([
-  'application/pdf',
-  'image/png',
-  'image/jpeg',
-  'image/gif',
-  'image/webp',
-])
+const allowedTypes = [
+  "application/pdf",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.ms-excel",
+  "text/csv",
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+];
 
 type ContentBlock =
   | { type: 'text'; text: string }
@@ -105,7 +108,7 @@ export async function POST(req: NextRequest) {
   }
 
   if (attachment) {
-    if (!ALLOWED_MEDIA_TYPES.has(attachment.mediaType)) {
+    if (!allowedTypes.includes(attachment.mediaType)) {
       return NextResponse.json({ error: 'Unsupported file type' }, { status: 400 })
     }
     // base64 is ~4/3× raw; 13.4MB base64 ≈ 10MB raw
