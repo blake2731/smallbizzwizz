@@ -103,7 +103,6 @@ export function OnboardingFlow({
   }
 
   const personalizedName = answers.name.trim().split(/\s+/)[0]
-  const lastAnswered = answers[FORM_QUESTIONS[FORM_QUESTIONS.length - 1].key].trim()
 
   const fadeInStyle: React.CSSProperties = { animation: 'sbw-fade-in 700ms ease both' }
   const fadeOutStyle: React.CSSProperties = { animation: 'sbw-fade-out 700ms ease both' }
@@ -171,8 +170,18 @@ export function OnboardingFlow({
           {FORM_QUESTIONS.map((q, idx) => {
             const visible = idx < revealed
             if (!visible) return null
+            const isLast = idx === FORM_QUESTIONS.length - 1
+            const isLatest = idx === revealed - 1
+            const hasAnswer = !!answers[q.key].trim()
             return (
-              <div key={q.key} style={{ animation: 'sbw-fade-in 600ms ease both' }}>
+              <form
+                key={q.key}
+                onSubmit={(e) => {
+                  e.preventDefault()
+                  submitQuestion(idx)
+                }}
+                style={{ animation: 'sbw-fade-in 600ms ease both' }}
+              >
                 <label
                   htmlFor={`onboarding-${q.key}`}
                   style={{
@@ -191,16 +200,14 @@ export function OnboardingFlow({
                     inputRefs.current[q.key] = el
                   }}
                   type="text"
+                  enterKeyHint={isLast ? 'done' : 'next'}
+                  autoCapitalize={q.key === 'name' ? 'words' : 'sentences'}
+                  autoCorrect="off"
+                  autoComplete="off"
                   value={answers[q.key]}
                   onChange={(e) =>
                     setAnswers((prev) => ({ ...prev, [q.key]: e.target.value }))
                   }
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      submitQuestion(idx)
-                    }
-                  }}
                   placeholder={q.placeholder}
                   maxLength={200}
                   style={{
@@ -216,31 +223,31 @@ export function OnboardingFlow({
                     boxSizing: 'border-box',
                   }}
                 />
-              </div>
+                {isLatest && (
+                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '0.75rem' }}>
+                    <button
+                      type="submit"
+                      disabled={!hasAnswer}
+                      style={{
+                        background: hasAnswer ? '#c8410a' : '#e4e0d8',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '8px',
+                        padding: '0.7rem 1.6rem',
+                        fontSize: '0.92rem',
+                        fontWeight: 500,
+                        cursor: hasAnswer ? 'pointer' : 'not-allowed',
+                        transition: 'background 0.15s',
+                        animation: 'sbw-fade-in 400ms ease both',
+                      }}
+                    >
+                      {isLast ? 'Continue →' : 'Next →'}
+                    </button>
+                  </div>
+                )}
+              </form>
             )
           })}
-
-          {revealed >= FORM_QUESTIONS.length && (
-            <button
-              onClick={() => submitQuestion(FORM_QUESTIONS.length - 1)}
-              disabled={!lastAnswered}
-              style={{
-                alignSelf: 'flex-end',
-                background: lastAnswered ? '#c8410a' : '#e4e0d8',
-                color: '#fff',
-                border: 'none',
-                borderRadius: '8px',
-                padding: '0.7rem 1.6rem',
-                fontSize: '0.92rem',
-                fontWeight: 500,
-                cursor: lastAnswered ? 'pointer' : 'not-allowed',
-                transition: 'background 0.15s',
-                animation: 'sbw-fade-in 500ms ease both',
-              }}
-            >
-              Continue →
-            </button>
-          )}
         </div>
       )}
 
