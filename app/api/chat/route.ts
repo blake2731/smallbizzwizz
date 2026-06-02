@@ -43,11 +43,13 @@ const IMAGE_MIME_TYPES = new Set([
   'image/webp',
 ])
 
-const allowedTypes = [
+const ALLOWED_MIME_TYPES = new Set([
   'application/pdf',
   ...SPREADSHEET_MIME_TYPES,
   ...IMAGE_MIME_TYPES,
-]
+])
+
+const SUPPORTED_IMAGE_TYPE_LABEL = 'PNG, JPEG, GIF, or WEBP'
 
 // Trimmed to keep the prompt within reasonable token budgets.
 const SPREADSHEET_TEXT_LIMIT = 60_000
@@ -61,6 +63,121 @@ type Attachment = {
   name: string
   mediaType: string
   data: string
+}
+
+type SupportedImageMimeType = 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp'
+
+function stripDataUrlPrefix(data: string): { base64: string; mediaTypeHint: string | null } {
+  const trimmed = data.trim()
+  const match = /^data:([^;,]+);base64,([\s\S]+)$/i.exec(trimmed)
+  if (!match) {
+    return { base64: trimmed, mediaTypeHint: null }
+  }
+
+  return {
+    mediaTypeHint: match[1].toLowerCase(),
+    base64: match[2].trim(),
+  }
+}
+
+function detectImageMediaType(base64: string): SupportedImageMimeType | null {
+  const buffer = Buffer.from(base64, 'base64')
+
+  if (
+    buffer.length >= 8 &&
+    buffer[0] === 0x89 &&
+    buffer[1] === 0x50 &&
+    buffer[2] === 0x4e &&
+    buffer[3] === 0x47 &&
+    buffer[4] === 0x0d &&
+    buffer[5] === 0x0a &&
+    buffer[6] === 0x1a &&
+    buffer[7] === 0x0a
+  ) {
+    return 'image/png'
+  }
+
+  if (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) {
+    return 'image/jpeg'
+  }
+
+  if (
+    buffer.length >= 6 &&
+    (buffer.subarray(0, 6).toString('ascii') === 'GIF87a' ||
+      buffer.subarray(0, 6).toString('ascii') === 'GIF89a')
+  ) {
+    return 'image/gif'
+  }
+
+  if (
+    buffer.length >= 12 &&
+    buffer.subarray(0, 4).toString('ascii') === 'RIFF' &&
+    buffer.subarray(8, 12).toString('ascii') === 'WEBP'
+  ) {
+    return 'image/webp'
+  }
+
+  return null
+}
+
+function normalizeAttachment(
+  attachment: Attachment,
+): { ok: true; attachment: Attachment } | { ok: false; error: string } {
+  const name =
+    typeof attachment.name === 'string' && attachment.name.trim()
+      ? attachment.name.trim()
+      : 'attachment'
+  const { base64, mediaTypeHint } = stripDataUrlPrefix(
+    typeof attachment.data === 'string' ? attachment.data : '',
+  )
+  const declaredMediaType =
+    typeof attachment.mediaType === 'string' ? attachment.mediaType.trim().toLowerCase() : ''
+  const mediaType = declaredMediaType || mediaTypeHint || ''
+
+  if (!base64) {
+    return {
+      ok: false,
+      error: 'We could not read that file. Please upload it again and try once more.',
+    }
+  }
+
+  const detectedImageMediaType = detectImageMediaType(base64)
+  if (detectedImageMediaType) {
+    return {
+      ok: true,
+      attachment: { name, mediaType: detectedImageMediaType, data: base64 },
+    }
+  }
+
+  if (!mediaType) {
+    return {
+      ok: false,
+      error:
+        'We could not determine that file type. Please upload a PDF, spreadsheet, PNG, JPEG, GIF, or WEBP file.',
+    }
+  }
+
+  if (mediaType.startsWith('image/')) {
+    return {
+      ok: false,
+      error: IMAGE_MIME_TYPES.has(mediaType)
+        ? `We could not read that image. Please upload a ${SUPPORTED_IMAGE_TYPE_LABEL} image and try again.`
+        : `Unsupported image format. Please upload a ${SUPPORTED_IMAGE_TYPE_LABEL} image.`,
+    }
+  }
+
+  if (!ALLOWED_MIME_TYPES.has(mediaType)) {
+    return {
+      ok: false,
+      error:
+        'Unsupported file type. Please upload a PDF, spreadsheet, PNG, JPEG, GIF, or WEBP file.',
+    }
+  }
+
+  return {
+    ok: true,
+    attachment: { name, mediaType, data: base64 },
+  }
 }
 
 function spreadsheetToText(base64: string, fileName: string): string {
@@ -146,16 +263,21 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
   const userMessage: string = typeof body?.message === 'string' ? body.message : ''
   const incomingConvId: string | null = typeof body?.conversationId === 'string' ? body.conversationId : null
-  const attachment: Attachment | undefined = body?.attachment
+  const attachmentInput: Attachment | undefined = body?.attachment
 
-  if (!userMessage.trim() && !attachment) {
+  if (!userMessage.trim() && !attachmentInput) {
     return NextResponse.json({ error: 'Empty message' }, { status: 400 })
   }
 
-  if (attachment) {
-    if (!allowedTypes.includes(attachment.mediaType)) {
-      return NextResponse.json({ error: 'Unsupported file type' }, { status: 400 })
+  let attachment: Attachment | undefined
+  if (attachmentInput) {
+    const normalizedAttachment = normalizeAttachment(attachmentInput)
+    if (!normalizedAttachment.ok) {
+      return NextResponse.json({ error: normalizedAttachment.error }, { status: 400 })
     }
+
+    attachment = normalizedAttachment.attachment
+
     // base64 is ~4/3× raw; 13.4MB base64 ≈ 10MB raw
     if (typeof attachment.data === 'string' && attachment.data.length > 13_400_000) {
       return NextResponse.json({ error: 'File too large' }, { status: 400 })
