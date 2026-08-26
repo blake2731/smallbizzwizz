@@ -55,7 +55,7 @@ export default function OgImage() {
       {/* Subtext */}
       <div style={{ fontSize: '28px', color: '#8a8680', maxWidth: '800px', lineHeight: 1.5 }}>
         Direct answers on pricing, contracts, clients &amp; hiring.
-        No hedging. No jargon. No "it depends."
+        No hedging. No jargon. No {`"it depends."`}
       </div>
 
       {/* CTA pill */}
