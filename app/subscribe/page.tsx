@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { useState } from 'react'
 import { useAuth, SignOutButton } from '@clerk/nextjs'
 
@@ -40,9 +41,9 @@ export default function SubscribePage() {
             </button>
           </SignOutButton>
         ) : (
-          <a href="/sign-in" style={{ fontSize: '0.875rem', color: '#4a4740', textDecoration: 'none', padding: '0.5rem 1.25rem', border: '1px solid #e4e0d8', borderRadius: '6px', fontWeight: 500 }}>
+          <Link href="/sign-in" style={{ fontSize: '0.875rem', color: '#4a4740', textDecoration: 'none', padding: '0.5rem 1.25rem', border: '1px solid #e4e0d8', borderRadius: '6px', fontWeight: 500 }}>
             Sign in
-          </a>
+          </Link>
         )}
       </nav>
 
