@@ -215,6 +215,33 @@ export default function HomePage() {
 
       <section className={styles.sectionAlt}>
         <div className={styles.shell}>
+          <div className={styles.sectionEyebrow}>VERIFY US BEFORE YOU TRUST US</div>
+          <h2 className={styles.h2}>The scanner now has a public validation lab.</h2>
+          <p className={styles.sectionLead}>
+            We do not have a customer case study yet, and we will not fake one. Instead, the proof page gives you controlled before/after fixtures, links to the scanner&apos;s public source code, the production commit that built the site, the methodology, and the sample deliverable. <a href="/proof">Inspect the proof and run the tests yourself.</a>
+          </p>
+          <div className={styles.featureGrid}>
+            <article className={styles.feature}>
+              <div className={styles.featureNumber}>01</div>
+              <h3 className={styles.featureTitle}>Reproducible</h3>
+              <p className={styles.featureCopy}>Run the same scanner against controlled pages with known differences.</p>
+            </article>
+            <article className={styles.feature}>
+              <div className={styles.featureNumber}>02</div>
+              <h3 className={styles.featureTitle}>Inspectable</h3>
+              <p className={styles.featureCopy}>Read the actual detection and crawling logic in the public GitHub repository.</p>
+            </article>
+            <article className={styles.feature}>
+              <div className={styles.featureNumber}>03</div>
+              <h3 className={styles.featureTitle}>Explicit limits</h3>
+              <p className={styles.featureCopy}>Synthetic fixtures are labeled synthetic; revenue lift requires real post-change data.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section className={styles.section}>
+        <div className={styles.shell}>
           <div className={styles.sectionEyebrow}>WHAT HAPPENS AFTER THE SCAN</div>
           <h2 className={styles.h2}>Use the repair plan yourself — or scope the work.</h2>
           <p className={styles.sectionLead}>
@@ -242,7 +269,7 @@ export default function HomePage() {
       <div className={styles.shell}>
         <footer className={styles.footer}>
           <div>SmallBizzWizz</div>
-          <div><a href="/sample">Sample Fix Pack</a> · <a href="/methodology">Methodology</a></div>
+          <div><a href="/proof">Proof</a> · <a href="/sample">Sample Fix Pack</a> · <a href="/methodology">Methodology</a></div>
         </footer>
       </div>
     </main>
