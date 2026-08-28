@@ -26,15 +26,15 @@ export async function POST(req: NextRequest) {
             currency: 'usd',
             unit_amount: 4900,
             product_data: {
-              name: 'SmallBizzWizz Revenue Leak Map',
-              description: 'Full website conversion leak diagnostic and prioritized recovery plan.',
+              name: 'SmallBizzWizz Revenue Fix Pack',
+              description: 'Full conversion leak diagnostic, priority order, recovery actions, and implementation templates.',
             },
           },
         },
       ],
       metadata: {
         targetUrl,
-        product: 'revenue_leak_map_v1',
+        product: 'revenue_fix_pack_v2',
       },
       success_url: `${origin}/audit/report?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${origin}/?url=${encodeURIComponent(targetUrl)}`,
