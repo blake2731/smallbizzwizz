@@ -1,146 +1,102 @@
 # SmallBizzWizz
 
-SmallBizzWizz is a production business software application that combines a conversational business advisor with a structured financial workflow for skilled nursing operators.
-
-The engineering principle behind the structured workflow is simple: calculations and data integrity belong in deterministic code. AI is used after the system has parsed, validated, normalized, and analyzed the source data.
+SmallBizzWizz is a public-source website capture scanner for local service businesses. It follows a shallow public conversion path and flags observable friction around calling, requesting service, booking, trust evidence, measurement, mobile setup, search clarity, and basic technical signals.
 
 Live application: https://smallbizzwizz.com
 
-## What the system does
+Proof and validation: https://smallbizzwizz.com/proof
 
-SmallBizzWizz currently has two major product surfaces.
+Methodology and limitations: https://smallbizzwizz.com/methodology
 
-### 1. Business advisor
+Illustrative Fix Pack: https://smallbizzwizz.com/sample
 
-Authenticated users can ask business questions, maintain conversation history, upload supported documents, and receive responses informed by profile and industry context.
+## Evidence standard
 
-### 2. Skilled nursing operator workflow
+SmallBizzWizz is intentionally narrow about what it claims.
 
-The application accepts supported Excel financial workbooks and turns them into persisted, inspectable business intelligence.
+The scanner can report public signals it observes. It does not know a business's traffic, close rate, average job value, CRM behavior, or private analytics, so it does not claim a specific conversion rate or dollar loss from a public scan.
 
-The processing path is:
+Synthetic validation fixtures are labeled synthetic. They are acceptance tests for scanner behavior, not customer case studies or proof of revenue lift.
 
-1. Authenticate the user.
-2. Validate the workbook and reporting period.
-3. Select or create the facility within the authenticated user scope.
-4. Compute a SHA 256 checksum for the workbook.
-5. Create an upload record and reporting period.
-6. Parse workbook structure and values with ExcelJS.
-7. Validate totals against child records and record integrity issues.
-8. Normalize source rows into a stable financial data model.
-9. Generate deterministic insight packets from normalized records.
-10. Generate audience specific narrative explanations from the structured insight data.
-11. Persist normalized records, insights, narratives, processing state, diagnostics, and failures.
+Customer outcomes will only be published as outcomes after there is an actual implementation, a defined measurement window, and enough post-change data to support the claim.
 
-## Why the pipeline is designed this way
+## Controlled validation
 
-A language model should not be the source of numerical truth for financial analysis.
+The repository ships two public, noindex validation fixtures for a fictional HVAC business:
 
-SmallBizzWizz separates deterministic processing from generated narrative output so the underlying facts can be inspected independently of the AI layer.
+- `/validation/before` deliberately contains weaker capture signals.
+- `/validation/after` deliberately adds a tap-to-call action, quote CTA, short form, trust evidence, and LocalBusiness structured data.
 
-The workbook parser reads hierarchy encoded by Excel outline levels and validates supported totals against accumulated child rows. Unsupported layouts are reported explicitly instead of being silently interpreted.
+The public proof page links both fixtures directly into the same `/scan` route used for normal scans. This allows anyone to reproduce the scanner's behavior against known inputs without relying on a testimonial or screenshot.
 
-Upload processing also records named stages such as parsing, validating, normalizing, insights, narratives, persisting, complete, and failed. This makes partial and failed processing states visible instead of reducing the workflow to a single success flag.
+## Current product flow
 
-## Reliability and safety behavior
+1. Normalize and safety-check the submitted public URL.
+2. Resolve the hostname and reject private/internal network targets.
+3. Fetch the homepage with bounded redirects, timeouts, content-type checks, and page-size limits.
+4. Identify up to three likely internal contact, quote, booking, appointment, or service-request pages.
+5. Evaluate the combined public source for deterministic capture, trust, measurement, technical, and speed signals.
+6. Return observable findings and positive signals.
+7. Offer a $49 DIY Revenue Fix Pack only when findings exist.
+8. Generate site-specific repair tickets with implementation steps, ready-to-adapt code or copy where applicable, and verification checks.
 
-Current implementation evidence includes:
+## Important implementation areas
 
-1. Workbook format validation before the structured parser runs.
-2. Authenticated facility selection scoped to the current user.
-3. SHA 256 workbook checksums.
-4. Explicit upload states for processing, completion, partial completion, validation failure, normalization failure, and general processing failure.
-5. Persisted diagnostics, validation statistics, integrity scores, and processing errors.
-6. Unique database constraints that protect important record identities.
-7. Cascade relationships for dependent records.
-8. MIME validation before chat attachments are sent to the model provider.
-9. A token protected health diagnostic endpoint that is hidden when disabled or unauthorized.
-10. Sensitive business file patterns excluded from version control.
-11. Production maintenance for mobile onboarding, spreadsheet upload behavior, bot traffic, and deployment configuration.
+- `lib/revenue-audit.ts` — URL safety, shallow conversion crawl, signal detection, findings, priorities, and recovery-plan logic.
+- `lib/revenue-fix-pack.ts` — converts detected findings into implementation-oriented repair tickets.
+- `app/scan/page.tsx` — public pre-scanned prospect result surface.
+- `app/audit/report/page.tsx` — Stripe-gated paid Fix Pack.
+- `app/proof/page.tsx` — public evidence and validation surface.
+- `app/methodology/page.tsx` — published scope and limitations.
+- `app/validation/before/page.tsx` and `app/validation/after/page.tsx` — controlled acceptance-test fixtures.
 
-## Data model
+## What the scanner can miss
 
-The PostgreSQL model includes:
+The current implementation primarily evaluates fetched public HTML. It can miss or under-detect behavior that only appears after client-side JavaScript executes, private analytics and CRM configuration, authenticated flows, off-site workflows, or conditional UI that is not present in the fetched source.
 
-1. User profiles.
-2. Conversations and messages.
-3. Facilities.
-4. Upload records and processing state.
-5. Reporting periods.
-6. Normalized financial records.
-7. Deterministic insight packets.
-8. Generated narratives with source context and supporting insight identifiers.
+Performance observations are single-pass signals to verify, not laboratory benchmarks.
 
-Drizzle ORM defines the schema, indexes, relationships, and migrations.
+The scanner is designed for appointment- and lead-driven local service businesses. Using it as a general-purpose score for unrelated business models is outside its intended scope.
+
+## Verification
+
+Production is deployed through Vercel from the `main` branch. Pull requests and main-branch changes run a GitHub Actions production build check, while Vercel independently builds deployment output.
+
+The `/proof` page exposes the production Git commit and links directly to the scanner implementation so the running product can be traced back to source.
 
 ## Technology
 
-1. Next.js 16.
-2. React 19.
-3. TypeScript.
-4. PostgreSQL through Neon.
-5. Drizzle ORM.
-6. Clerk authentication.
-7. ExcelJS workbook processing.
-8. Anthropic API.
-9. Stripe.
-10. Tailwind CSS 4.
-11. Vercel deployment.
+- Next.js 16
+- React 19
+- TypeScript
+- Stripe Checkout
+- Clerk
+- Vercel
+- PostgreSQL / Neon and Drizzle ORM for legacy and authenticated application surfaces still present in the repository
 
-## Repository map
+## Legacy code
 
-Important implementation areas include:
-
-`app/api/uploads/route.ts`: authenticated workbook intake and validation.
-
-`lib/parsers/cypress.ts`: deterministic workbook parsing and total validation.
-
-`lib/verticals/nursing-home/pipeline.ts`: staged financial processing workflow.
-
-`lib/verticals/nursing-home/financialMappings.ts`: normalization rules.
-
-`lib/verticals/nursing-home/insights.ts`: deterministic operational insight generation.
-
-`lib/verticals/nursing-home/narratives.ts`: narrative generation from structured source data.
-
-`lib/db/schema.ts`: persistent data model and constraints.
-
-`app/api/healthcheck/route.ts`: protected production diagnostics.
+This repository predates the current SmallBizzWizz product direction and still contains older authenticated business-advisor and skilled-nursing workflow code. Those modules are not evidence for the current scanner and are not presented as part of the active public offer. They remain in the repository while the product is being simplified rather than being hidden or rewritten out of history.
 
 ## Development
 
-Install dependencies:
-
 ```bash
 npm ci
-```
-
-Run the development server:
-
-```bash
 npm run dev
 ```
 
-Run linting:
-
-```bash
-npm run lint
-```
-
-Create a production build:
+Production verification:
 
 ```bash
 npm run build
 ```
 
-Database commands are available for Drizzle generation, migration, push, and Studio workflows.
+Linting:
 
-## Current engineering gap
+```bash
+npm run lint
+```
 
-The repository does not yet expose an automated application test suite through `package.json`.
+## Current proof gap
 
-That is a known quality gap rather than something this README hides. The next reliability step is to extract deterministic workbook fixtures and pipeline rules into automated tests, then add user visible critical path testing around upload and authentication behavior.
-
-## Product status
-
-SmallBizzWizz is publicly deployed and has continued to receive production maintenance. The repository should be read as an evolving product system rather than a finished reference implementation.
+SmallBizzWizz does not yet have a real customer implementation case study with measured pre/post conversion data. That is the next evidence milestone. Until then, controlled validation, inspectable source, transparent limitations, deployment traceability, and real prospect-specific observations are the available proof layers.
