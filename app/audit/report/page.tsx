@@ -31,6 +31,7 @@ export default async function PaidAuditReport(props: {
     const plan = buildRecoveryPlan(result)
     const fixPack = buildFixPack(result)
     const firstMoves = fixPack.slice(0, 3)
+    const highPriority = result.findings.filter((finding) => finding.severity === 'critical' || finding.severity === 'high').length
 
     return (
       <main style={styles.page}>
@@ -42,14 +43,14 @@ export default async function PaidAuditReport(props: {
 
           <section style={styles.hero}>
             <div>
-              <div style={styles.eyebrow}>FULL DIAGNOSTIC + IMPLEMENTATION</div>
-              <h1 style={styles.h1}>Your website is scoring {result.score}/100.</h1>
+              <div style={styles.eyebrow}>OBSERVATIONS + IMPLEMENTATION</div>
+              <h1 style={styles.h1}>Your Fix Pack contains {result.findings.length} repair ticket{result.findings.length === 1 ? '' : 's'}.</h1>
               <p style={styles.lead}>{result.summary}</p>
               <div style={styles.url}>{result.finalUrl}</div>
             </div>
             <div style={styles.scoreCard}>
-              <div style={styles.grade}>{result.grade}</div>
-              <div style={styles.scoreLabel}>Revenue capture grade</div>
+              <div style={styles.grade}>{highPriority}</div>
+              <div style={styles.scoreLabel}>high-priority repair{highPriority === 1 ? '' : 's'}</div>
             </div>
           </section>
 
@@ -85,7 +86,7 @@ export default async function PaidAuditReport(props: {
             <h2 style={styles.h2}>Fix these first</h2>
             <div style={styles.stack}>
               {plan.length === 0 ? (
-                <div style={styles.goodBox}>No major observable leaks were found in this scan.</div>
+                <div style={styles.goodBox}>No major observable issues were found in this scan.</div>
               ) : plan.map((item) => (
                 <article key={item.priority} style={styles.findingCard}>
                   <div style={styles.priority}>{String(item.priority).padStart(2, '0')}</div>
@@ -161,17 +162,17 @@ export default async function PaidAuditReport(props: {
             <div style={styles.metrics}>
               <Metric label="Pages scanned" value={String(result.pagesScanned?.length ?? 1)} />
               <Metric label="Homepage response" value={`${(result.responseMs / 1000).toFixed(1)} sec`} />
-              <Metric label="Leaks found" value={String(result.findings.length)} />
+              <Metric label="Issues observed" value={String(result.findings.length)} />
               <Metric label="Positive signals" value={String(result.positives.length)} />
             </div>
             <p style={styles.disclaimer}>
-              This diagnostic evaluates observable website conversion signals. It does not estimate lost dollars without the business&apos;s actual traffic, call volume, close rate, and average job value. Performance observations from a single scan should be verified with repeated field or lab measurements before major changes are made.
+              This diagnostic evaluates observable public website signals. Static source checks can miss JavaScript-rendered forms, private analytics, and other client-side behavior. It does not estimate lost dollars without the business&apos;s actual traffic, call volume, close rate, and average job value. Verify findings against the live site before material changes are made. <Link href="/methodology" style={{ color: '#99f2bd' }}>Read the methodology and limitations.</Link>
             </p>
           </section>
 
           <footer style={styles.footer}>
             <div>SmallBizzWizz</div>
-            <div>Find the leaks. Fix the path. Capture more of the demand you already paid for.</div>
+            <div>Observe friction. Verify it. Fix the path.</div>
           </footer>
         </div>
       </main>

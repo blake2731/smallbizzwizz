@@ -8,9 +8,9 @@ const checks = [
   ['01', 'Lead capture', 'Checks whether a ready buyer can call, request service, book, or leave a structured lead without hunting.'],
   ['02', 'Trust friction', 'Looks for reviews, local proof, service area clarity, and other signals that reduce comparison shopping.'],
   ['03', 'Measurement', 'Checks for common analytics signals so the business can see which traffic actually turns into contact.'],
-  ['04', 'Mobile readiness', 'Finds basic mobile setup failures that make urgent buyers fight the page instead of contacting the company.'],
+  ['04', 'Mobile readiness', 'Finds basic mobile setup failures that can make urgent buyers fight the page instead of contacting the company.'],
   ['05', 'Search clarity', 'Reviews title, description, structured data, and other basic signals that help qualified traffic understand the offer.'],
-  ['06', 'Speed observation', 'Flags a slow server response as a signal to verify, without pretending one scan is a laboratory benchmark.'],
+  ['06', 'Speed observation', 'Flags a slow server response as a signal to verify, without pretending one request is a laboratory benchmark.'],
 ] as const
 
 function track(name: string, parameters: Record<string, string | number | boolean> = {}) {
@@ -95,23 +95,23 @@ export default function HomePage() {
       <div className={styles.shell}>
         <nav className={styles.nav}>
           <a href="/" className={styles.brand}>SmallBizzWizz</a>
-          <div className={styles.navTag}>Revenue leakage intelligence for local service businesses</div>
+          <div className={styles.navTag}>Website capture diagnostics for local service businesses</div>
         </nav>
 
         <section className={styles.hero}>
           <div>
-            <div className={styles.eyebrow}>STOP BUYING LEADS YOU FAIL TO CAPTURE</div>
-            <h1 className={styles.h1}>Find the money leaking out of your <em>website.</em></h1>
+            <div className={styles.eyebrow}>CHECK THE PATH BETWEEN INTEREST AND CONTACT</div>
+            <h1 className={styles.h1}>Find the friction between a website visit and a <em>real lead.</em></h1>
             <p className={styles.lead}>
-              SmallBizzWizz follows the conversion path a local service customer can actually take, then flags observable friction that can turn paid traffic, referrals, and urgent buyers into somebody else&apos;s job.
+              SmallBizzWizz checks public conversion paths for observable problems that can make calling, requesting service, or booking harder. It reports what it can see — not a made-up revenue forecast.
             </p>
             <p className={styles.heroNote}>
-              Built for HVAC, plumbing, electrical, roofing, restoration, landscaping, cleaning, pest control, and other appointment driven local services.
+              Built for HVAC, plumbing, electrical, roofing, restoration, landscaping, cleaning, pest control, and other appointment-driven local services.
             </p>
           </div>
 
           <form className={styles.scanCard} onSubmit={scan}>
-            <label className={styles.scanLabel} htmlFor="website">Run the free revenue leak scan</label>
+            <label className={styles.scanLabel} htmlFor="website">Run the free website capture scan</label>
             <input
               id="website"
               className={styles.input}
@@ -125,10 +125,10 @@ export default function HomePage() {
               required
             />
             <button className={styles.primaryButton} type="submit" disabled={scanning}>
-              {scanning ? 'Following conversion paths…' : 'Scan my website'}
+              {scanning ? 'Checking conversion paths…' : 'Scan my website'}
             </button>
             {error ? <div className={styles.error}>{error}</div> : null}
-            <p className={styles.micro}>No signup. No sales call. Homepage plus likely contact, quote, or booking pages.</p>
+            <p className={styles.micro}>No signup. Public pages only. Homepage plus likely contact, quote, or booking pages.</p>
           </form>
         </section>
       </div>
@@ -137,9 +137,9 @@ export default function HomePage() {
         <div className={styles.shell}>
           <section className={styles.results} aria-live="polite">
             <div className={styles.resultTop}>
-              <div className={styles.score}>{result.score}</div>
+              <div className={styles.score}>{result.findings.length}</div>
               <div>
-                <h2 className={styles.resultTitle}>Revenue capture grade: {result.grade}</h2>
+                <h2 className={styles.resultTitle}>{result.findings.length === 1 ? 'Observable friction signal found' : 'Observable friction signals found'}</h2>
                 <p className={styles.resultSummary}>{result.summary}</p>
               </div>
             </div>
@@ -147,7 +147,7 @@ export default function HomePage() {
             <div className={styles.findings}>
               {result.findings.slice(0, 3).map((finding) => (
                 <div className={styles.finding} key={finding.id}>
-                  <div className={styles.severity}>{finding.severity}</div>
+                  <div className={styles.severity}>{finding.severity} priority</div>
                   <div>
                     <div className={styles.findingTitle}>{finding.title}</div>
                     <div className={styles.findingCopy}>{finding.detail}</div>
@@ -155,20 +155,20 @@ export default function HomePage() {
                 </div>
               ))}
               {result.findings.length === 0 ? (
-                <div className={styles.findingCopy}>This pass did not find a major observable conversion leak. We are not going to sell you a report just to invent one.</div>
+                <div className={styles.findingCopy}>This pass did not find a major observable conversion issue. We are not going to invent one just to sell a report.</div>
               ) : null}
             </div>
 
             {result.findings.length > 0 ? (
               <div className={styles.unlock}>
                 <div>
-                  <div className={styles.unlockTitle}>Unlock the Revenue Fix Pack</div>
+                  <div className={styles.unlockTitle}>DIY Revenue Fix Pack</div>
                   <div className={styles.unlockCopy}>
-                    Get every detected leak, priority order, concrete recovery actions, and implementation templates you can hand directly to whoever manages the site. Immediate browser delivery after payment.
+                    If you manage the site yourself, get every detected issue, implementation order, repair steps, verification checks, and copy or code where applicable. The $49 pack is the self-serve option — not the ceiling of what SmallBizzWizz can do.
                   </div>
                 </div>
                 <button className={styles.checkoutButton} type="button" onClick={buyReport} disabled={paying}>
-                  {paying ? 'Opening checkout…' : 'Get the Fix Pack · $49'}
+                  {paying ? 'Opening checkout…' : 'Get the DIY Fix Pack · $49'}
                 </button>
               </div>
             ) : null}
@@ -179,22 +179,16 @@ export default function HomePage() {
       <section className={styles.proofStrip}>
         <div className={`${styles.shell} ${styles.proofGrid}`}>
           <div className={styles.proofItem}>
-            <div className={styles.proofNumber}>52%</div>
-            <div className={styles.proofCopy}>
-              of callers to home service businesses reach a person in Invoca&apos;s 2026 benchmark. <a href="https://www.invoca.com/reports/the-invoca-home-services-lead-conversion-benchmarks-report-2026" target="_blank" rel="noreferrer">Source</a>
-            </div>
+            <div className={styles.proofNumber}>0</div>
+            <div className={styles.proofCopy}>invented dollar-loss claims. A public scan cannot know your traffic, close rate, or job value.</div>
           </div>
           <div className={styles.proofItem}>
-            <div className={styles.proofNumber}>38%</div>
-            <div className={styles.proofCopy}>
-              of calls from digital marketing are leads across the same home services benchmark. <a href="https://www.invoca.com/reports/the-invoca-home-services-lead-conversion-benchmarks-report-2026" target="_blank" rel="noreferrer">Source</a>
-            </div>
+            <div className={styles.proofNumber}>4</div>
+            <div className={styles.proofCopy}>public pages maximum in the current shallow crawl: the homepage plus likely conversion pages.</div>
           </div>
           <div className={styles.proofItem}>
-            <div className={styles.proofNumber}>55%</div>
-            <div className={styles.proofCopy}>
-              of home service businesses in the benchmark do not ask leads to buy or book the job. <a href="https://www.invoca.com/reports/the-invoca-home-services-lead-conversion-benchmarks-report-2026" target="_blank" rel="noreferrer">Source</a>
-            </div>
+            <div className={styles.proofNumber}>2</div>
+            <div className={styles.proofCopy}>paths forward: use the DIY repair plan, or scope implementation after the findings are verified.</div>
           </div>
         </div>
       </section>
@@ -202,9 +196,9 @@ export default function HomePage() {
       <section className={styles.section}>
         <div className={styles.shell}>
           <div className={styles.sectionEyebrow}>WHAT THE SCANNER LOOKS FOR</div>
-          <h2 className={styles.h2}>Not prettier websites. Better capture paths.</h2>
+          <h2 className={styles.h2}>Not prettier websites. Cleaner paths to contact.</h2>
           <p className={styles.sectionLead}>
-            The scan is deterministic. It follows likely conversion pages and looks for observable conditions instead of asking an AI model to invent a score from a screenshot.
+            The scan uses deterministic checks against public page source. That makes it reproducible, but not omniscient: JavaScript-rendered elements and private analytics can be missed. <a href="/methodology">Read the methodology and limitations.</a>
           </p>
 
           <div className={styles.featureGrid}>
@@ -221,33 +215,34 @@ export default function HomePage() {
 
       <section className={styles.sectionAlt}>
         <div className={styles.shell}>
-          <div className={styles.sectionEyebrow}>THE PAID PRODUCT</div>
-          <h2 className={styles.h2}>Diagnosis plus implementation. No subscription.</h2>
+          <div className={styles.sectionEyebrow}>WHAT HAPPENS AFTER THE SCAN</div>
+          <h2 className={styles.h2}>Use the repair plan yourself — or scope the work.</h2>
           <p className={styles.sectionLead}>
-            Start with the free scan. Buy the Fix Pack only if the scanner finds something worth changing.
+            The $49 Fix Pack is for owners or web managers who want implementation-ready instructions. If somebody sent you a SmallBizzWizz scan and you would rather have the changes made for you, reply to that person. Implementation is quoted only after the finding and website stack are verified.
           </p>
 
           <div className={styles.priceBox}>
             <div className={styles.priceRow}>
               <div className={styles.price}>$49</div>
-              <div className={styles.priceMeta}>one time</div>
+              <div className={styles.priceMeta}>DIY · one time</div>
             </div>
             <div className={styles.priceList}>
-              <div>✓ Complete leak inventory</div>
-              <div>✓ Severity and priority order</div>
-              <div>✓ Concrete recovery action for every issue</div>
-              <div>✓ Step by step implementation guidance</div>
-              <div>✓ Copy and code templates where applicable</div>
-              <div>✓ Immediate delivery after Stripe payment</div>
+              <div>✓ Complete observed-issue inventory</div>
+              <div>✓ Priority order and estimated effort</div>
+              <div>✓ Why each issue was raised on this site</div>
+              <div>✓ Step-by-step repair guidance</div>
+              <div>✓ Copy and code starting points where applicable</div>
+              <div>✓ Verification checklist for every repair</div>
             </div>
           </div>
+          <p className={styles.sectionLead}><a href="/sample">See an illustrative Fix Pack sample before paying.</a></p>
         </div>
       </section>
 
       <div className={styles.shell}>
         <footer className={styles.footer}>
           <div>SmallBizzWizz</div>
-          <div>Find the leaks. Fix the path. Capture more of the demand you already paid for.</div>
+          <div><a href="/sample">Sample Fix Pack</a> · <a href="/methodology">Methodology</a></div>
         </footer>
       </div>
     </main>
