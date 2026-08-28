@@ -30,6 +30,7 @@ export default async function PaidAuditReport(props: {
     const result = await auditWebsite(targetUrl)
     const plan = buildRecoveryPlan(result)
     const fixPack = buildFixPack(result)
+    const firstMoves = fixPack.slice(0, 3)
 
     return (
       <main style={styles.page}>
@@ -51,6 +52,33 @@ export default async function PaidAuditReport(props: {
               <div style={styles.scoreLabel}>Revenue capture grade</div>
             </div>
           </section>
+
+          <section style={styles.valuePanel}>
+            <div style={styles.sectionEyebrow}>WHAT YOU BOUGHT</div>
+            <h2 style={styles.h2}>A repair plan for this site, not a generic SEO score.</h2>
+            <div style={styles.valueGrid}>
+              <div style={styles.valueItem}><strong>Priority</strong><span>Every detected issue ordered by likely conversion impact.</span></div>
+              <div style={styles.valueItem}><strong>Site context</strong><span>Why the scanner raised each issue on this specific conversion path.</span></div>
+              <div style={styles.valueItem}><strong>Implementation</strong><span>Concrete steps, estimated effort, and ready to adapt copy or code.</span></div>
+              <div style={styles.valueItem}><strong>Verification</strong><span>A checklist to prove the repair actually works before calling it done.</span></div>
+            </div>
+          </section>
+
+          {firstMoves.length > 0 ? (
+            <section style={styles.actionPanel}>
+              <div style={styles.sectionEyebrow}>START HERE</div>
+              <h2 style={styles.h2}>The first moves I would make</h2>
+              <div style={styles.quickGrid}>
+                {firstMoves.map((item, index) => (
+                  <div key={item.findingId} style={styles.quickCard}>
+                    <div style={styles.quickNumber}>{String(index + 1).padStart(2, '0')}</div>
+                    <strong>{item.title}</strong>
+                    <span>{item.effort}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
 
           <section style={styles.panel}>
             <div style={styles.sectionEyebrow}>PRIORITY ORDER</div>
@@ -77,23 +105,40 @@ export default async function PaidAuditReport(props: {
           {fixPack.length > 0 ? (
             <section style={styles.panel}>
               <div style={styles.sectionEyebrow}>IMPLEMENTATION PACK</div>
-              <h2 style={styles.h2}>Turn the findings into changes</h2>
+              <h2 style={styles.h2}>Turn every finding into a finished repair</h2>
               <div style={styles.stack}>
                 {fixPack.map((item, index) => (
                   <article key={item.findingId} style={styles.implementationCard}>
                     <div style={styles.implementationHeader}>
                       <span style={styles.priority}>{String(index + 1).padStart(2, '0')}</span>
                       <div>
+                        <div style={styles.ticketMeta}>ESTIMATED EFFORT · {item.effort.toUpperCase()}</div>
                         <h3 style={styles.cardTitle}>{item.title}</h3>
                         <p style={styles.cardCopy}>{item.outcome}</p>
                       </div>
                     </div>
+
+                    <div style={styles.contextBox}>
+                      <strong>Why this was raised on your site</strong>
+                      <span>{item.whyThisSite}</span>
+                    </div>
+
+                    <div style={styles.subheading}>Implementation steps</div>
                     <ol style={styles.steps}>
                       {item.steps.map((step) => <li key={step}>{step}</li>)}
                     </ol>
+
                     {item.template ? (
-                      <pre style={styles.codeBlock}><code>{item.template}</code></pre>
+                      <>
+                        <div style={styles.subheading}>Ready to adapt</div>
+                        <pre style={styles.codeBlock}><code>{item.template}</code></pre>
+                      </>
                     ) : null}
+
+                    <div style={styles.subheading}>Done means verified</div>
+                    <ul style={styles.verifyList}>
+                      {item.verify.map((check) => <li key={check}>{check}</li>)}
+                    </ul>
                   </article>
                 ))}
               </div>
@@ -175,19 +220,30 @@ const styles: Record<string, React.CSSProperties> = {
   grade: { fontSize: 76, fontWeight: 900, lineHeight: 1, color: '#99f2bd', letterSpacing: '-0.06em' },
   scoreLabel: { marginTop: 8, color: '#8da098', fontSize: 12, textTransform: 'uppercase', letterSpacing: '0.08em' },
   panel: { background: '#0c1814', border: '1px solid #21312c', borderRadius: 24, padding: '30px', marginTop: 22 },
+  valuePanel: { background: '#0f211a', border: '1px solid #315044', borderRadius: 24, padding: '30px', marginTop: 22 },
+  actionPanel: { background: '#11251d', border: '1px solid #376047', borderRadius: 24, padding: '30px', marginTop: 22 },
   sectionEyebrow: { color: '#67d995', fontSize: 11, fontWeight: 800, letterSpacing: '0.14em' },
   h2: { fontSize: 30, letterSpacing: '-0.035em', margin: '8px 0 24px' },
+  valueGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 12 },
+  valueItem: { display: 'grid', gap: 7, padding: 17, borderRadius: 14, background: '#10231b', border: '1px solid #29483a', color: '#b8c8c0', lineHeight: 1.5 },
+  quickGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(210px,1fr))', gap: 12 },
+  quickCard: { display: 'grid', gap: 8, padding: 18, borderRadius: 15, background: '#0c1814', border: '1px solid #315044', color: '#c3d1ca' },
+  quickNumber: { color: '#99f2bd', fontSize: 11, letterSpacing: '0.1em', fontWeight: 800 },
   stack: { display: 'grid', gap: 12 },
   findingCard: { display: 'grid', gridTemplateColumns: '54px minmax(0,1fr)', gap: 18, padding: 20, borderRadius: 18, background: '#101f1a', border: '1px solid #263d34' },
   implementationCard: { padding: 22, borderRadius: 18, background: '#101f1a', border: '1px solid #315044' },
   implementationHeader: { display: 'grid', gridTemplateColumns: '54px minmax(0,1fr)', gap: 18, alignItems: 'start' },
   priority: { width: 44, height: 44, borderRadius: 12, background: '#183126', color: '#99f2bd', display: 'grid', placeItems: 'center', fontWeight: 800 },
+  ticketMeta: { color: '#67d995', fontSize: 10, letterSpacing: '0.1em', fontWeight: 800, marginBottom: 4 },
   cardCategory: { color: '#729183', fontSize: 10, textTransform: 'uppercase', letterSpacing: '0.12em', fontWeight: 800 },
   cardTitle: { margin: '5px 0 8px', fontSize: 20 },
   cardCopy: { color: '#b0c0b8', lineHeight: 1.6, margin: 0 },
   fixBox: { marginTop: 14, padding: 14, borderRadius: 12, background: '#142820', color: '#d9e7df', lineHeight: 1.55 },
-  steps: { margin: '18px 0 0 72px', paddingLeft: 18, color: '#c3d1ca', lineHeight: 1.65 },
-  codeBlock: { margin: '18px 0 0 72px', padding: 16, borderRadius: 12, overflowX: 'auto', whiteSpace: 'pre-wrap', background: '#07110f', border: '1px solid #263d34', color: '#bce8ce', fontSize: 13, lineHeight: 1.5 },
+  contextBox: { margin: '18px 0 0 72px', padding: 15, borderRadius: 12, background: '#142820', display: 'grid', gap: 6, color: '#c7d7cf', lineHeight: 1.55 },
+  subheading: { margin: '20px 0 0 72px', color: '#99f2bd', fontSize: 11, fontWeight: 800, letterSpacing: '0.08em', textTransform: 'uppercase' },
+  steps: { margin: '10px 0 0 72px', paddingLeft: 18, color: '#c3d1ca', lineHeight: 1.65 },
+  verifyList: { margin: '10px 0 0 72px', paddingLeft: 18, color: '#c3d1ca', lineHeight: 1.65 },
+  codeBlock: { margin: '10px 0 0 72px', padding: 16, borderRadius: 12, overflowX: 'auto', whiteSpace: 'pre-wrap', background: '#07110f', border: '1px solid #263d34', color: '#bce8ce', fontSize: 13, lineHeight: 1.5 },
   goodGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(220px,1fr))', gap: 10 },
   goodItem: { padding: 14, background: '#10231b', border: '1px solid #254333', borderRadius: 12, color: '#bce8ce' },
   goodBox: { padding: 18, background: '#10231b', border: '1px solid #254333', borderRadius: 14, color: '#bce8ce' },
