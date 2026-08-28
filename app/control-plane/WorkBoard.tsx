@@ -1,7 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 import { updateWorkStatus } from './actions'
 import styles from './control-plane.module.css'
 
@@ -51,6 +51,10 @@ export default function WorkBoard({
   const [dragOverStatus, setDragOverStatus] = useState<WorkStatus | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+
+  useEffect(() => {
+    setItems(initialItems)
+  }, [initialItems])
 
   function moveItem(itemId: number, nextStatus: WorkStatus) {
     const item = items.find((candidate) => candidate.id === itemId)
