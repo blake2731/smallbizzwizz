@@ -7,7 +7,7 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export const metadata: Metadata = {
-  title: 'Website Revenue Leak Scan | SmallBizzWizz',
+  title: 'Website Capture Scan | SmallBizzWizz',
   robots: { index: false, follow: false },
 }
 
@@ -25,10 +25,10 @@ export default async function ShareableScanPage(props: {
     const result = await auditWebsite(input)
     const topFindings = result.findings.slice(0, 3)
     const pagesScanned = [...new Set(result.pagesScanned)]
-    const topIssueNames = result.findings.slice(0, 2).map((finding) => finding.title.toLowerCase())
+    const highPriority = result.findings.filter((finding) => finding.severity === 'critical' || finding.severity === 'high').length
     const summary = result.findings.length === 0
-      ? `No major observable conversion leaks were found across ${pagesScanned.length} scanned page${pagesScanned.length === 1 ? '' : 's'}.`
-      : `The scan found ${result.findings.length} observable leak${result.findings.length === 1 ? '' : 's'} across ${pagesScanned.length} page${pagesScanned.length === 1 ? '' : 's'}. The highest priority issues are ${topIssueNames.join(' and ')}.`
+      ? `No major observable conversion issues were found across ${pagesScanned.length} scanned page${pagesScanned.length === 1 ? '' : 's'}.`
+      : `The scanner found ${result.findings.length} observable friction signal${result.findings.length === 1 ? '' : 's'} across ${pagesScanned.length} page${pagesScanned.length === 1 ? '' : 's'}. These are public-source observations, not a predicted conversion rate or revenue-loss estimate.`
 
     return (
       <main style={styles.page}>
@@ -40,27 +40,27 @@ export default async function ShareableScanPage(props: {
 
           <section style={styles.hero}>
             <div>
-              <div style={styles.eyebrow}>WE SCANNED YOUR CONVERSION PATH</div>
-              <h1 style={styles.h1}>Revenue capture score: {result.score}/100</h1>
+              <div style={styles.eyebrow}>WE CHECKED THE PUBLIC CONVERSION PATH</div>
+              <h1 style={styles.h1}>{result.findings.length} observable friction signal{result.findings.length === 1 ? '' : 's'} found.</h1>
               <p style={styles.lead}>{summary}</p>
               <div style={styles.url}>{result.finalUrl}</div>
             </div>
             <div style={styles.scoreCard}>
-              <div style={styles.grade}>{result.grade}</div>
-              <div style={styles.scoreLabel}>Website grade</div>
+              <div style={styles.grade}>{highPriority}</div>
+              <div style={styles.scoreLabel}>high-priority signal{highPriority === 1 ? '' : 's'}</div>
             </div>
           </section>
 
           {topFindings.length ? (
             <section style={styles.panel}>
               <div style={styles.sectionEyebrow}>HIGHEST PRIORITY FINDINGS</div>
-              <h2 style={styles.h2}>What is creating friction</h2>
+              <h2 style={styles.h2}>What is worth checking first</h2>
               <div style={styles.stack}>
                 {topFindings.map((finding, index) => (
                   <article key={finding.id} style={styles.findingCard}>
                     <div style={styles.priority}>{String(index + 1).padStart(2, '0')}</div>
                     <div>
-                      <div style={styles.severity}>{finding.severity}</div>
+                      <div style={styles.severity}>{finding.severity} priority</div>
                       <h3 style={styles.cardTitle}>{finding.title}</h3>
                       <p style={styles.cardCopy}>{finding.detail}</p>
                     </div>
@@ -71,7 +71,7 @@ export default async function ShareableScanPage(props: {
           ) : (
             <section style={styles.panel}>
               <div style={styles.sectionEyebrow}>STRONG RESULT</div>
-              <h2 style={styles.h2}>No major observable conversion leak was found.</h2>
+              <h2 style={styles.h2}>No major observable conversion issue was found.</h2>
               <p style={styles.cardCopy}>We do not sell a Fix Pack when the scan does not find a meaningful problem to fix.</p>
             </section>
           )}
@@ -83,22 +83,24 @@ export default async function ShareableScanPage(props: {
               {pagesScanned.map((page) => <div key={page} style={styles.pageUrl}>{page}</div>)}
             </div>
             <p style={styles.disclaimer}>
-              SmallBizzWizz evaluates observable public website conversion signals. It does not claim a specific dollar loss without your actual traffic, call volume, close rate, and job value. Performance observations should be verified with repeated measurements.
+              SmallBizzWizz evaluates observable public website signals. Static page-source checks can miss JavaScript-rendered forms, private analytics, or other client-side behavior. Findings should be verified before implementation. The scan does not estimate lost dollars without actual business data.
             </p>
+            <p style={styles.disclaimer}><Link href="/methodology" style={styles.textLink}>Read the methodology and limitations.</Link></p>
           </section>
 
           {result.findings.length ? (
             <section style={styles.offer}>
               <div>
-                <div style={styles.sectionEyebrow}>THE NEXT STEP</div>
-                <h2 style={styles.offerTitle}>Get the exact fix plan, not another sales call.</h2>
+                <div style={styles.sectionEyebrow}>IF YOU WANT THE REPAIR PLAN</div>
+                <h2 style={styles.offerTitle}>DIY instructions are $49. Implementation is scoped separately.</h2>
                 <p style={styles.offerCopy}>
-                  The $49 Revenue Fix Pack includes every detected issue, priority order, step by step implementation guidance, and copy or code templates where applicable. It is delivered immediately in the browser after payment.
+                  The DIY Revenue Fix Pack includes every observed issue, implementation order, estimated effort, repair steps, verification checks, and copy or code starting points where applicable. If somebody sent you this scan and you would rather have the work done for you, reply to that person instead of buying the DIY pack.
                 </p>
+                <p style={styles.disclaimer}><Link href="/sample" style={styles.textLink}>See an illustrative Fix Pack sample first.</Link></p>
               </div>
               <div style={styles.checkoutColumn}>
                 <div style={styles.price}>$49</div>
-                <div style={styles.priceMeta}>one time · no subscription</div>
+                <div style={styles.priceMeta}>DIY · one time · no subscription</div>
                 <CheckoutButton url={result.finalUrl} score={result.score} />
               </div>
             </section>
@@ -106,7 +108,7 @@ export default async function ShareableScanPage(props: {
 
           <footer style={styles.footer}>
             <div>SmallBizzWizz</div>
-            <div>Find the leaks. Fix the path. Capture more of the demand you already paid for.</div>
+            <div><Link href="/sample" style={styles.textLink}>Sample Fix Pack</Link> · <Link href="/methodology" style={styles.textLink}>Methodology</Link></div>
           </footer>
         </div>
       </main>
@@ -164,5 +166,6 @@ const styles: Record<string, React.CSSProperties> = {
   price: { fontSize: 48, fontWeight: 900, letterSpacing: '-0.06em' },
   priceMeta: { color: '#789087', fontSize: 11, margin: '-2px 0 16px' },
   linkButton: { display: 'inline-block', marginTop: 8, background: '#99f2bd', color: '#07110f', padding: '13px 16px', borderRadius: 11, textDecoration: 'none', fontWeight: 850 },
+  textLink: { color: '#99f2bd' },
   footer: { display: 'flex', justifyContent: 'space-between', gap: 20, color: '#62766d', fontSize: 11, padding: '34px 2px 0', flexWrap: 'wrap' },
 }
