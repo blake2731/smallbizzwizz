@@ -22,6 +22,7 @@ export interface RevenueAuditResult {
   responseMs: number
   pageTitle: string | null
   metaDescription: string | null
+  phoneNumber: string | null
   pagesScanned: string[]
   findings: RevenueFinding[]
   positives: string[]
@@ -270,6 +271,11 @@ function hasLeadForm(html: string) {
   )
 }
 
+function extractPhoneNumber(html: string): string | null {
+  const match = html.match(/(?:\+?1[\s.()-]*)?(?:\(?\d{3}\)?[\s.()-]*)\d{3}[\s.-]*\d{4}/)
+  return match?.[0]?.replace(/\s+/g, ' ').trim() || null
+}
+
 export async function auditWebsite(input: string): Promise<RevenueAuditResult> {
   const normalized = normalizeAuditUrl(input)
   const { finalUrl, html, responseMs } = await fetchPublicHtml(normalized)
@@ -285,6 +291,7 @@ export async function auditWebsite(input: string): Promise<RevenueAuditResult> {
   const metaDescription =
     textFromMatch(html, /<meta[^>]+name=["']description["'][^>]+content=["']([^"']+)["'][^>]*>/i) ??
     textFromMatch(html, /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']description["'][^>]*>/i)
+  const phoneNumber = extractPhoneNumber(allHtml)
 
   if (!finalUrl.startsWith('https://')) {
     findings.push(
@@ -314,7 +321,7 @@ export async function auditWebsite(input: string): Promise<RevenueAuditResult> {
     findings.push(finding('viewport', 'technical', 8, 'Mobile viewport setup is missing', 'A poor mobile presentation can make a ready buyer abandon the page.', 'Add a responsive viewport declaration and verify the page at common phone widths.'))
   } else positives.push('Mobile viewport support is declared')
 
-  const phoneNumberVisible = /(?:\+?1[\s.()-]*)?(?:\(?\d{3}\)?[\s.()-]*)\d{3}[\s.-]*\d{4}/.test(allHtml)
+  const phoneNumberVisible = Boolean(phoneNumber)
   if (!has(allHtml, /href\s*=\s*["']tel:/i)) {
     findings.push(
       finding(
@@ -390,6 +397,7 @@ export async function auditWebsite(input: string): Promise<RevenueAuditResult> {
     responseMs,
     pageTitle,
     metaDescription,
+    phoneNumber,
     pagesScanned,
     findings,
     positives,
