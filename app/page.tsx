@@ -162,13 +162,13 @@ export default function HomePage() {
             {result.findings.length > 0 ? (
               <div className={styles.unlock}>
                 <div>
-                  <div className={styles.unlockTitle}>Unlock the complete Revenue Leak Map</div>
+                  <div className={styles.unlockTitle}>Unlock the Revenue Fix Pack</div>
                   <div className={styles.unlockCopy}>
-                    Get every detected leak, the exact recovery action for each one, the priority order, and the positive elements you should preserve. Immediate browser delivery after payment.
+                    Get every detected leak, priority order, concrete recovery actions, and implementation templates you can hand directly to whoever manages the site. Immediate browser delivery after payment.
                   </div>
                 </div>
                 <button className={styles.checkoutButton} type="button" onClick={buyReport} disabled={paying}>
-                  {paying ? 'Opening checkout…' : 'Get full report · $49'}
+                  {paying ? 'Opening checkout…' : 'Get the Fix Pack · $49'}
                 </button>
               </div>
             ) : null}
@@ -181,19 +181,19 @@ export default function HomePage() {
           <div className={styles.proofItem}>
             <div className={styles.proofNumber}>52%</div>
             <div className={styles.proofCopy}>
-              of home service callers speak with a person across Invoca&apos;s current benchmark. <a href="https://www.invoca.com/reports/the-invoca-call-conversion-benchmarks-report-home-services-2025" target="_blank" rel="noreferrer">Source</a>
+              of callers to home service businesses reach a person in Invoca&apos;s 2026 benchmark. <a href="https://www.invoca.com/reports/the-invoca-home-services-lead-conversion-benchmarks-report-2026" target="_blank" rel="noreferrer">Source</a>
             </div>
           </div>
           <div className={styles.proofItem}>
-            <div className={styles.proofNumber}>40%</div>
+            <div className={styles.proofNumber}>38%</div>
             <div className={styles.proofCopy}>
-              of AI using home service pros surveyed say AI helps them respond faster and lose fewer leads. <a href="https://www.housecallpro.com/resources/ai-in-the-trades/" target="_blank" rel="noreferrer">Source</a>
+              of calls from digital marketing are leads across the same home services benchmark. <a href="https://www.invoca.com/reports/the-invoca-home-services-lead-conversion-benchmarks-report-2026" target="_blank" rel="noreferrer">Source</a>
             </div>
           </div>
           <div className={styles.proofItem}>
-            <div className={styles.proofNumber}>79%</div>
+            <div className={styles.proofNumber}>55%</div>
             <div className={styles.proofCopy}>
-              of homeowners surveyed expect to repair or replace at least one home system in 2026. <a href="https://www.housecallpro.com/resources/home-service-spending-report-2026-release/" target="_blank" rel="noreferrer">Source</a>
+              of home service businesses in the benchmark do not ask leads to buy or book the job. <a href="https://www.invoca.com/reports/the-invoca-home-services-lead-conversion-benchmarks-report-2026" target="_blank" rel="noreferrer">Source</a>
             </div>
           </div>
         </div>
@@ -222,9 +222,9 @@ export default function HomePage() {
       <section className={styles.sectionAlt}>
         <div className={styles.shell}>
           <div className={styles.sectionEyebrow}>THE PAID PRODUCT</div>
-          <h2 className={styles.h2}>One report. No subscription.</h2>
+          <h2 className={styles.h2}>Diagnosis plus implementation. No subscription.</h2>
           <p className={styles.sectionLead}>
-            Start with the free scan. Buy the full map only if it finds something worth fixing.
+            Start with the free scan. Buy the Fix Pack only if the scanner finds something worth changing.
           </p>
 
           <div className={styles.priceBox}>
@@ -236,7 +236,8 @@ export default function HomePage() {
               <div>✓ Complete leak inventory</div>
               <div>✓ Severity and priority order</div>
               <div>✓ Concrete recovery action for every issue</div>
-              <div>✓ Positive signals to preserve during the fix</div>
+              <div>✓ Step by step implementation guidance</div>
+              <div>✓ Copy and code templates where applicable</div>
               <div>✓ Immediate delivery after Stripe payment</div>
             </div>
           </div>
