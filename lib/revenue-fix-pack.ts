@@ -26,10 +26,19 @@ function pageScope(result: RevenueAuditResult) {
   return `${count} scanned page${count === 1 ? '' : 's'}`
 }
 
+function telHref(phoneNumber: string | null) {
+  if (!phoneNumber) return null
+  const digits = phoneNumber.replace(/\D/g, '')
+  if (digits.length === 10) return `+1${digits}`
+  if (digits.length === 11 && digits.startsWith('1')) return `+${digits}`
+  return null
+}
+
 function sectionForFinding(finding: RevenueFinding, result: RevenueAuditResult): FixPackSection {
   const business = businessLabel(result)
   const host = new URL(result.finalUrl).hostname.replace(/^www\./, '')
   const scope = pageScope(result)
+  const callableNumber = telHref(result.phoneNumber)
 
   switch (finding.id) {
     case 'click-to-call':
@@ -37,7 +46,7 @@ function sectionForFinding(finding: RevenueFinding, result: RevenueAuditResult):
         findingId: finding.id,
         title: 'Make every visible phone number a one tap call',
         outcome: 'Remove friction between an urgent mobile visitor and the phone call that can become a booked job.',
-        whyThisSite: `Across ${scope} for ${business}, the scanner found a phone number in the page content but did not detect a direct tel: call path.`,
+        whyThisSite: `Across ${scope} for ${business}, the scanner found ${result.phoneNumber ? `the public number ${result.phoneNumber}` : 'a phone number'} in the page content but did not detect a direct tel: call path.`,
         effort: '20 to 40 minutes',
         steps: [
           'Use the same public business number already shown on the site and wrap it in a tel: link.',
@@ -50,7 +59,9 @@ function sectionForFinding(finding: RevenueFinding, result: RevenueAuditResult):
           'Confirm the phone dialer opens with the correct business number.',
           'Confirm the phone_click analytics event fires once per tap.',
         ],
-        template: `<!-- Use the same public number already displayed on ${host}. -->\n<a href="tel:+1XXXXXXXXXX" aria-label="Call ${business}">Call ${business}</a>`,
+        template: callableNumber && result.phoneNumber
+          ? `<a href="tel:${callableNumber}" aria-label="Call ${business}">${result.phoneNumber}</a>`
+          : `<!-- Replace with the public number already displayed on ${host}. -->\n<a href="tel:+1XXXXXXXXXX" aria-label="Call ${business}">Call ${business}</a>`,
       }
 
     case 'form':
@@ -181,7 +192,7 @@ function sectionForFinding(finding: RevenueFinding, result: RevenueAuditResult):
   "@type": "LocalBusiness",
   "name": ${JSON.stringify(business)},
   "url": ${JSON.stringify(result.finalUrl)},
-  "telephone": "+1-REPLACE-WITH-PUBLIC-NUMBER",
+  "telephone": ${JSON.stringify(callableNumber ?? result.phoneNumber ?? '+1-REPLACE-WITH-PUBLIC-NUMBER')},
   "areaServed": "REPLACE-WITH-ACTUAL-SERVICE-AREA"
 }`,
       }
