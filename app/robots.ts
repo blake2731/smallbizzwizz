@@ -9,6 +9,7 @@ export default function robots(): MetadataRoute.Robots {
         '/api/',
         '/audit/report',
         '/scan',
+        '/validation',
         '/chat',
         '/debug',
         '/facilities',
