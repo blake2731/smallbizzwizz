@@ -3,6 +3,29 @@ import { auditWebsite } from '@/lib/revenue-audit'
 
 export const runtime = 'nodejs'
 
+function response(result: unknown) {
+  return NextResponse.json(result, {
+    headers: {
+      'cache-control': 'no-store',
+    },
+  })
+}
+
+function errorResponse(error: unknown) {
+  const message = error instanceof Error ? error.message : 'Unable to scan that website.'
+  return NextResponse.json({ error: message }, { status: 400 })
+}
+
+export async function GET(req: NextRequest) {
+  try {
+    const url = req.nextUrl.searchParams.get('url')
+    if (!url) return NextResponse.json({ error: 'Add a url query parameter.' }, { status: 400 })
+    return response(await auditWebsite(url))
+  } catch (error) {
+    return errorResponse(error)
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const contentType = req.headers.get('content-type') ?? ''
@@ -21,14 +44,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Enter a business website to scan.' }, { status: 400 })
     }
 
-    const result = await auditWebsite(body.url)
-    return NextResponse.json(result, {
-      headers: {
-        'cache-control': 'no-store',
-      },
-    })
+    return response(await auditWebsite(body.url))
   } catch (error) {
-    const message = error instanceof Error ? error.message : 'Unable to scan that website.'
-    return NextResponse.json({ error: message }, { status: 400 })
+    return errorResponse(error)
   }
 }
