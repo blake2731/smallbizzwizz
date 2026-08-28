@@ -10,8 +10,14 @@ const checks = [
   ['03', 'Measurement', 'Checks for common analytics signals so the business can see which traffic actually turns into contact.'],
   ['04', 'Mobile readiness', 'Finds basic mobile setup failures that make urgent buyers fight the page instead of contacting the company.'],
   ['05', 'Search clarity', 'Reviews title, description, structured data, and other basic signals that help qualified traffic understand the offer.'],
-  ['06', 'Speed risk', 'Measures the first response and flags a page that is slow enough to create avoidable abandonment.'],
+  ['06', 'Speed observation', 'Flags a slow server response as a signal to verify, without pretending one scan is a laboratory benchmark.'],
 ] as const
+
+function track(name: string, parameters: Record<string, string | number | boolean> = {}) {
+  if (typeof window === 'undefined') return
+  const gtag = (window as typeof window & { gtag?: (...args: unknown[]) => void }).gtag
+  gtag?.('event', name, parameters)
+}
 
 export default function HomePage() {
   const [url, setUrl] = useState('')
@@ -30,6 +36,7 @@ export default function HomePage() {
     setError('')
     setResult(null)
     setScanning(true)
+    track('revenue_audit_started')
 
     try {
       const response = await fetch('/api/revenue-audit', {
@@ -39,10 +46,19 @@ export default function HomePage() {
       })
       const data = await response.json()
       if (!response.ok) throw new Error(data.error || 'The scan failed.')
-      setResult(data as RevenueAuditResult)
-      setUrl((data as RevenueAuditResult).finalUrl)
+      const audit = data as RevenueAuditResult
+      setResult(audit)
+      setUrl(audit.finalUrl)
+      track('revenue_audit_completed', {
+        score: audit.score,
+        grade: audit.grade,
+        findings: audit.findings.length,
+        pages_scanned: audit.pagesScanned?.length ?? 1,
+      })
     } catch (scanError) {
-      setError(scanError instanceof Error ? scanError.message : 'The scan failed.')
+      const message = scanError instanceof Error ? scanError.message : 'The scan failed.'
+      setError(message)
+      track('revenue_audit_failed')
     } finally {
       setScanning(false)
     }
@@ -52,6 +68,11 @@ export default function HomePage() {
     if (!result) return
     setPaying(true)
     setError('')
+    track('revenue_report_checkout_started', {
+      score: result.score,
+      grade: result.grade,
+      findings: result.findings.length,
+    })
 
     try {
       const response = await fetch('/api/revenue-audit/checkout', {
@@ -64,6 +85,7 @@ export default function HomePage() {
       window.location.assign(data.url)
     } catch (checkoutError) {
       setError(checkoutError instanceof Error ? checkoutError.message : 'Checkout could not be started.')
+      track('revenue_report_checkout_failed')
       setPaying(false)
     }
   }
@@ -81,7 +103,7 @@ export default function HomePage() {
             <div className={styles.eyebrow}>STOP BUYING LEADS YOU FAIL TO CAPTURE</div>
             <h1 className={styles.h1}>Find the money leaking out of your <em>website.</em></h1>
             <p className={styles.lead}>
-              SmallBizzWizz scans the conversion path a real local service customer sees and flags the friction that can turn paid traffic, referrals, and urgent buyers into somebody else&apos;s job.
+              SmallBizzWizz follows the conversion path a local service customer can actually take, then flags observable friction that can turn paid traffic, referrals, and urgent buyers into somebody else&apos;s job.
             </p>
             <p className={styles.heroNote}>
               Built for HVAC, plumbing, electrical, roofing, restoration, landscaping, cleaning, pest control, and other appointment driven local services.
@@ -89,7 +111,7 @@ export default function HomePage() {
           </div>
 
           <form className={styles.scanCard} onSubmit={scan}>
-            <label className={styles.scanLabel} htmlFor="website">Run the free leak scan</label>
+            <label className={styles.scanLabel} htmlFor="website">Run the free revenue leak scan</label>
             <input
               id="website"
               className={styles.input}
@@ -103,10 +125,10 @@ export default function HomePage() {
               required
             />
             <button className={styles.primaryButton} type="submit" disabled={scanning}>
-              {scanning ? 'Scanning conversion path…' : 'Scan my website'}
+              {scanning ? 'Following conversion paths…' : 'Scan my website'}
             </button>
             {error ? <div className={styles.error}>{error}</div> : null}
-            <p className={styles.micro}>No signup. No sales call. Public website signals only.</p>
+            <p className={styles.micro}>No signup. No sales call. Homepage plus likely contact, quote, or booking pages.</p>
           </form>
         </section>
       </div>
@@ -133,7 +155,7 @@ export default function HomePage() {
                 </div>
               ))}
               {result.findings.length === 0 ? (
-                <div className={styles.findingCopy}>This first pass did not find a major observable conversion leak. We are not going to sell you a report just to invent one.</div>
+                <div className={styles.findingCopy}>This pass did not find a major observable conversion leak. We are not going to sell you a report just to invent one.</div>
               ) : null}
             </div>
 
@@ -182,7 +204,7 @@ export default function HomePage() {
           <div className={styles.sectionEyebrow}>WHAT THE SCANNER LOOKS FOR</div>
           <h2 className={styles.h2}>Not prettier websites. Better capture paths.</h2>
           <p className={styles.sectionLead}>
-            The first pass is deterministic. It looks for observable conditions instead of asking an AI model to invent a score from a screenshot.
+            The scan is deterministic. It follows likely conversion pages and looks for observable conditions instead of asking an AI model to invent a score from a screenshot.
           </p>
 
           <div className={styles.featureGrid}>
