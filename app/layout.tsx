@@ -6,17 +6,17 @@ import './globals.css'
 const GA_MEASUREMENT_ID = 'G-MEE10S53ZR'
 
 export const metadata: Metadata = {
-  title: 'SmallBizzWizz — Revenue Leak Scanner for Local Service Businesses',
-  description: 'Scan your local service business website for conversion leaks that can cost calls, quote requests, bookings, and paid leads. Free first pass, no signup required.',
+  title: 'SmallBizzWizz — Website Capture Scanner for Local Service Businesses',
+  description: 'Check public website conversion paths for observable friction around calls, service requests, bookings, trust, and measurement. Free first pass, no signup required.',
   keywords: [
     'website conversion audit',
     'home services lead conversion',
     'local service website audit',
-    'missed lead audit',
+    'lead capture audit',
     'HVAC website conversion',
     'plumbing website audit',
     'contractor lead conversion',
-    'revenue leak scanner',
+    'website capture scanner',
     'local business conversion optimization',
   ],
   authors: [{ name: 'SmallBizzWizz' }],
@@ -29,14 +29,14 @@ export const metadata: Metadata = {
     type: 'website',
     url: 'https://smallbizzwizz.com',
     siteName: 'SmallBizzWizz',
-    title: 'SmallBizzWizz — Find the Revenue Leaks in Your Website',
-    description: 'Free conversion leak scan for HVAC, plumbing, electrical, roofing, restoration, landscaping, and other local service businesses.',
-    images: [{ url: '/opengraph-image', width: 1200, height: 630, alt: 'SmallBizzWizz Revenue Leak Scanner' }],
+    title: 'SmallBizzWizz — Check the Path From Visit to Lead',
+    description: 'Free public-source website capture scan for HVAC, plumbing, electrical, roofing, restoration, landscaping, and other local service businesses.',
+    images: [{ url: '/opengraph-image', width: 1200, height: 630, alt: 'SmallBizzWizz Website Capture Scanner' }],
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'SmallBizzWizz — Revenue Leak Scanner',
-    description: 'Find observable website friction that can cost local service businesses calls, quote requests, bookings, and paid leads.',
+    title: 'SmallBizzWizz — Website Capture Scanner',
+    description: 'Find observable website friction around calls, service requests, bookings, trust, and measurement.',
     images: ['/opengraph-image'],
   },
   robots: {
