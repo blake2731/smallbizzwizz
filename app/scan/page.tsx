@@ -24,6 +24,11 @@ export default async function ShareableScanPage(props: {
   try {
     const result = await auditWebsite(input)
     const topFindings = result.findings.slice(0, 3)
+    const pagesScanned = [...new Set(result.pagesScanned)]
+    const topIssueNames = result.findings.slice(0, 2).map((finding) => finding.title.toLowerCase())
+    const summary = result.findings.length === 0
+      ? `No major observable conversion leaks were found across ${pagesScanned.length} scanned page${pagesScanned.length === 1 ? '' : 's'}.`
+      : `The scan found ${result.findings.length} observable leak${result.findings.length === 1 ? '' : 's'} across ${pagesScanned.length} page${pagesScanned.length === 1 ? '' : 's'}. The highest priority issues are ${topIssueNames.join(' and ')}.`
 
     return (
       <main style={styles.page}>
@@ -37,7 +42,7 @@ export default async function ShareableScanPage(props: {
             <div>
               <div style={styles.eyebrow}>WE SCANNED YOUR CONVERSION PATH</div>
               <h1 style={styles.h1}>Revenue capture score: {result.score}/100</h1>
-              <p style={styles.lead}>{result.summary}</p>
+              <p style={styles.lead}>{summary}</p>
               <div style={styles.url}>{result.finalUrl}</div>
             </div>
             <div style={styles.scoreCard}>
@@ -73,9 +78,9 @@ export default async function ShareableScanPage(props: {
 
           <section style={styles.panel}>
             <div style={styles.sectionEyebrow}>WHAT WAS CHECKED</div>
-            <h2 style={styles.h2}>{result.pagesScanned.length} page{result.pagesScanned.length === 1 ? '' : 's'} scanned</h2>
+            <h2 style={styles.h2}>{pagesScanned.length} page{pagesScanned.length === 1 ? '' : 's'} scanned</h2>
             <div style={styles.pages}>
-              {result.pagesScanned.map((page) => <div key={page} style={styles.pageUrl}>{page}</div>)}
+              {pagesScanned.map((page) => <div key={page} style={styles.pageUrl}>{page}</div>)}
             </div>
             <p style={styles.disclaimer}>
               SmallBizzWizz evaluates observable public website conversion signals. It does not claim a specific dollar loss without your actual traffic, call volume, close rate, and job value. Performance observations should be verified with repeated measurements.
