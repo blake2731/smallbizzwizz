@@ -22,12 +22,27 @@ export interface RevenueAuditResult {
   responseMs: number
   pageTitle: string | null
   metaDescription: string | null
+  pagesScanned: string[]
   findings: RevenueFinding[]
   positives: string[]
   summary: string
 }
 
 const MAX_HTML_CHARS = 1_500_000
+const MAX_SUPPORTING_PAGES = 3
+const CONVERSION_LINK_TERMS = [
+  'contact',
+  'quote',
+  'estimate',
+  'book',
+  'booking',
+  'appointment',
+  'schedule',
+  'request-service',
+  'request_service',
+  'service-request',
+  'service_request',
+]
 
 export function normalizeAuditUrl(input: string): string {
   const trimmed = input.trim()
@@ -115,7 +130,7 @@ async function fetchPublicHtml(initialUrl: string): Promise<{
       redirect: 'manual',
       signal: AbortSignal.timeout(9000),
       headers: {
-        'user-agent': 'SmallBizzWizz Revenue Leak Scanner/1.0 (+https://smallbizzwizz.com)',
+        'user-agent': 'SmallBizzWizz Revenue Leak Scanner/2.0 (+https://smallbizzwizz.com)',
         accept: 'text/html,application/xhtml+xml',
       },
     })
@@ -189,12 +204,82 @@ function grade(score: number): RevenueAuditResult['grade'] {
   return 'F'
 }
 
+function decodeHtmlAttribute(value: string) {
+  return value
+    .replace(/&amp;/gi, '&')
+    .replace(/&#x27;/gi, "'")
+    .replace(/&#39;/gi, "'")
+    .replace(/&quot;/gi, '"')
+}
+
+function extractConversionLinks(html: string, baseUrl: string): string[] {
+  const base = new URL(baseUrl)
+  const candidates = new Map<string, number>()
+  const linkExpression = /<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi
+
+  for (const match of html.matchAll(linkExpression)) {
+    const rawHref = decodeHtmlAttribute(match[1] ?? '').trim()
+    if (!rawHref || rawHref.startsWith('#') || /^(?:mailto:|tel:|sms:|javascript:)/i.test(rawHref)) continue
+
+    try {
+      const candidate = new URL(rawHref, base)
+      if (!['http:', 'https:'].includes(candidate.protocol)) continue
+      if (candidate.hostname !== base.hostname) continue
+      candidate.hash = ''
+
+      const pathText = `${candidate.pathname} ${match[2] ?? ''}`.toLowerCase()
+      let score = 0
+      for (const term of CONVERSION_LINK_TERMS) {
+        if (pathText.includes(term)) score += term === 'contact' ? 5 : 4
+      }
+      if (!score) continue
+
+      const normalized = candidate.toString()
+      candidates.set(normalized, Math.max(candidates.get(normalized) ?? 0, score))
+    } catch {
+      // Ignore malformed links.
+    }
+  }
+
+  return [...candidates.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, MAX_SUPPORTING_PAGES)
+    .map(([url]) => url)
+}
+
+async function crawlConversionPages(homeUrl: string, homeHtml: string) {
+  const candidates = extractConversionLinks(homeHtml, homeUrl)
+  const pages = await Promise.all(
+    candidates.map(async (url) => {
+      try {
+        const page = await fetchPublicHtml(url)
+        return { url: page.finalUrl, html: page.html }
+      } catch {
+        return null
+      }
+    }),
+  )
+
+  return pages.filter((page): page is { url: string; html: string } => Boolean(page))
+}
+
+function hasLeadForm(html: string) {
+  return (
+    has(html, /<form\b/i) ||
+    has(html, /<(?:iframe|script)\b[^>]*(?:jotform|typeform|formstack|wufoo|hubspot|hsforms|gravityforms|wpforms|calendly|housecallpro|servicetitan|jobber|thumbtack|angi)/i)
+  )
+}
+
 export async function auditWebsite(input: string): Promise<RevenueAuditResult> {
   const normalized = normalizeAuditUrl(input)
   const { finalUrl, html, responseMs } = await fetchPublicHtml(normalized)
-  const lower = html.toLowerCase()
+  const supportingPages = await crawlConversionPages(finalUrl, html)
+  const allHtml = [html, ...supportingPages.map((page) => page.html)].join('\n')
+  const lower = allHtml.toLowerCase()
+  const homeLower = html.toLowerCase()
   const findings: RevenueFinding[] = []
   const positives: string[] = []
+  const pagesScanned = [finalUrl, ...supportingPages.map((page) => page.url)]
 
   const pageTitle = textFromMatch(html, /<title[^>]*>([\s\S]*?)<\/title>/i)
   const metaDescription =
@@ -209,61 +294,82 @@ export async function auditWebsite(input: string): Promise<RevenueAuditResult> {
 
   if (responseMs > 3000) {
     findings.push(
-      finding('speed', 'speed', 12, 'The first page response is slow', `The scan waited about ${(responseMs / 1000).toFixed(1)} seconds for the page response. Slow first impressions increase abandonment, especially on mobile.`, 'Reduce server response time, remove blocking third party scripts, and optimize the heaviest above the fold assets.'),
+      finding('speed', 'speed', 8, 'A slow server response was observed', `This scan observed about ${(responseMs / 1000).toFixed(1)} seconds before the homepage response completed. One scan is not a lab benchmark, but a slow origin response can contribute to abandonment.`, 'Verify performance with repeated field or lab measurements, then reduce server response time and defer nonessential work if the slowdown is reproducible.'),
     )
   } else if (responseMs > 1500) {
     findings.push(
-      finding('speed', 'speed', 6, 'Page response could be faster', `The initial response took about ${(responseMs / 1000).toFixed(1)} seconds.`, 'Target a materially faster first response and defer nonessential scripts.'),
+      finding('speed', 'speed', 4, 'Server response deserves a second look', `This scan observed about ${(responseMs / 1000).toFixed(1)} seconds for the homepage response.`, 'Confirm the pattern with repeated performance measurements before treating speed as a conversion issue.'),
     )
-  } else positives.push('Initial page response is reasonably fast')
+  } else positives.push('Homepage server response was reasonably fast in this scan')
 
   if (!pageTitle) {
-    findings.push(finding('title', 'technical', 8, 'No page title was detected', 'Search results and browser tabs lose an important relevance signal.', 'Add a concise title that includes the primary service and market.' ))
+    findings.push(finding('title', 'technical', 8, 'No page title was detected', 'Search results and browser tabs lose an important relevance signal.', 'Add a concise title that includes the primary service and market.'))
   } else positives.push('A page title is present')
 
   if (!metaDescription) {
-    findings.push(finding('meta-description', 'technical', 5, 'No meta description was detected', 'The business gives up control over an important search result sales message.', 'Write a specific description that states the service, location, and next action.' ))
+    findings.push(finding('meta-description', 'technical', 5, 'No meta description was detected', 'The business gives up control over an important search result sales message.', 'Write a specific description that states the service, location, and next action.'))
   } else positives.push('A meta description is present')
 
   if (!has(html, /<meta[^>]+name=["']viewport["']/i)) {
-    findings.push(finding('viewport', 'technical', 8, 'Mobile viewport setup is missing', 'A poor mobile presentation can make a ready buyer abandon the page.', 'Add a responsive viewport declaration and verify the page at common phone widths.' ))
+    findings.push(finding('viewport', 'technical', 8, 'Mobile viewport setup is missing', 'A poor mobile presentation can make a ready buyer abandon the page.', 'Add a responsive viewport declaration and verify the page at common phone widths.'))
   } else positives.push('Mobile viewport support is declared')
 
-  if (!has(html, /href\s*=\s*["']tel:/i)) {
-    findings.push(finding('click-to-call', 'capture', 16, 'No click to call path was detected', 'For a local service buyer, forcing someone to copy a phone number adds friction at the exact moment they are ready to contact the business.', 'Add a prominent tel: call action in the header and a persistent mobile call action.' ))
-  } else positives.push('Visitors can tap to call')
+  const phoneNumberVisible = /(?:\+?1[\s.()-]*)?(?:\(?\d{3}\)?[\s.()-]*)\d{3}[\s.-]*\d{4}/.test(allHtml)
+  if (!has(allHtml, /href\s*=\s*["']tel:/i)) {
+    findings.push(
+      finding(
+        'click-to-call',
+        'capture',
+        16,
+        phoneNumberVisible ? 'A phone number is visible but not tap to call' : 'No tap to call path was detected',
+        phoneNumberVisible
+          ? 'The site exposes a phone number but the scanned conversion path does not make it directly tappable. That adds friction for mobile buyers who are ready to call.'
+          : 'The scanned conversion path did not expose a tap to call action. For urgent local service buyers, phone access is often the fastest path to a job.',
+        'Add a prominent tel: call action in the header and a persistent mobile call action.',
+      ),
+    )
+  } else positives.push('Visitors can tap to call on the scanned conversion path')
 
-  if (!has(html, /<form\b/i)) {
-    findings.push(finding('form', 'capture', 10, 'No lead form was detected', 'Visitors who cannot call immediately have no obvious structured fallback.', 'Add a short quote or service request form asking only for the information needed to respond.' ))
-  } else positives.push('A lead form is available')
+  if (!hasLeadForm(allHtml)) {
+    findings.push(
+      finding(
+        'form',
+        'capture',
+        10,
+        'No lead form was found on the scanned conversion path',
+        `The scanner checked the homepage${supportingPages.length ? ` plus ${supportingPages.length} likely contact or booking page${supportingPages.length === 1 ? '' : 's'}` : ''} and did not find a standard or common embedded lead form. Visitors who cannot call immediately may have no structured fallback.`,
+        'Add a short quote or service request form asking only for the information needed to respond.',
+      ),
+    )
+  } else positives.push('A lead form is available on the scanned conversion path')
 
-  const hasBookingAction = /\b(book|schedule|request|get)\b[\s\S]{0,35}\b(service|appointment|quote|estimate|consultation)\b/i.test(lower)
+  const hasBookingAction = /\b(book|schedule|request|get|free)\b[\s\S]{0,45}\b(service|appointment|quote|estimate|consultation|inspection|assessment)\b/i.test(lower)
   if (!hasBookingAction) {
-    findings.push(finding('booking-cta', 'capture', 12, 'No clear booking or quote action was detected', 'A visitor should not have to decide what to do next. Ambiguous navigation leaks high intent traffic.', 'Use one primary action such as “Get an estimate”, “Book service”, or “Request a quote” above the fold and repeat it through the page.' ))
-  } else positives.push('A booking or quote action is visible')
+    findings.push(finding('booking-cta', 'capture', 12, 'No clear booking or quote action was detected', 'A visitor should not have to decide what to do next. Ambiguous navigation leaks high intent traffic.', 'Use one primary action such as “Get an estimate”, “Book service”, or “Request a quote” above the fold and repeat it through the conversion path.'))
+  } else positives.push('A booking, inspection, or quote action is visible')
 
-  const hasTrustProof = /testimonial|reviews?|rated\s+[45]|stars?|google reviews?|customer stories|what our customers say/i.test(lower)
+  const hasTrustProof = /testimonial|reviews?|rated\s+[45]|stars?|google reviews?|customer stories|what our customers say|bbb|licensed|insured|certified/i.test(lower)
   if (!hasTrustProof) {
-    findings.push(finding('trust-proof', 'trust', 7, 'Strong trust proof was not detected', 'Local buyers often compare several providers. Without visible proof, the site makes price and familiarity do too much work.', 'Place recent reviews, rating proof, licenses, guarantees, or recognizable customer outcomes near the first conversion action.' ))
-  } else positives.push('Trust or review proof is visible')
+    findings.push(finding('trust-proof', 'trust', 7, 'Strong trust proof was not detected', 'Local buyers often compare several providers. Without visible proof, the site makes price and familiarity do too much work.', 'Place recent reviews, rating proof, licenses, guarantees, certifications, or recognizable customer outcomes near the first conversion action.'))
+  } else positives.push('Trust, review, or credential proof is visible')
 
-  const hasAnalytics = /googletagmanager|gtag\(|google-analytics|analytics\.js|clarity\.ms|plausible\.io|segment\.com|fathom/i.test(lower)
+  const hasAnalytics = /googletagmanager|gtag\(|google-analytics|analytics\.js|clarity\.ms|plausible\.io|segment\.com|fathom|matomo|facebook\.net\/en_US\/fbevents|connect\.facebook\.net/i.test(homeLower)
   if (!hasAnalytics) {
-    findings.push(finding('analytics', 'measurement', 7, 'Conversion measurement was not detected', 'Without measurement, the business cannot tell which traffic produces calls, forms, or bookings.', 'Install analytics and track calls, form submissions, bookings, and the source that generated each lead.' ))
-  } else positives.push('A common analytics system is present')
+    findings.push(finding('analytics', 'measurement', 7, 'Common conversion measurement was not detected', 'The homepage source did not expose a common analytics or measurement system. That does not prove measurement is absent, but without reliable tracking the business cannot attribute calls, forms, or bookings to traffic sources.', 'Verify analytics and conversion tracking are active, then track calls, form submissions, bookings, and the source that generated each lead.'))
+  } else positives.push('A common analytics or measurement system is present')
 
   if (!has(html, /application\/ld\+json/i)) {
-    findings.push(finding('schema', 'technical', 4, 'Structured business data was not detected', 'Search engines have less explicit information about the business and its services.', 'Add valid LocalBusiness or relevant service structured data with consistent name, address, phone, service area, and URLs.' ))
+    findings.push(finding('schema', 'technical', 4, 'Structured business data was not detected', 'Search engines have less explicit information about the business and its services.', 'Add valid LocalBusiness or relevant service structured data with consistent name, address, phone, service area, and URLs.'))
   } else positives.push('Structured data is present')
 
-  const hasChat = /intercom|crisp\.chat|tawk\.to|drift\.com|livechat|chatwoot|podium|birdeye/i.test(lower)
+  const hasChat = /intercom|crisp\.chat|tawk\.to|drift\.com|livechat|chatwoot|podium|birdeye|href\s*=\s*["']sms:|facebook\.com\/messages|m\.me\//i.test(lower)
   if (!hasChat) {
-    findings.push(finding('chat', 'capture', 4, 'No live or automated message path was detected', 'Some visitors will message when they will not call or complete a form.', 'Consider a lightweight message or missed lead recovery channel if the business can respond quickly.' ))
-  } else positives.push('A messaging channel is present')
+    findings.push(finding('chat', 'capture', 3, 'No secondary messaging path was detected', 'Some visitors will message when they will not call or complete a form. This is a lower priority signal when the primary conversion paths are strong.', 'Consider a lightweight message or missed lead recovery channel if the business can respond quickly.'))
+  } else positives.push('A secondary messaging channel is present')
 
-  const hasServiceArea = /service area|areas we serve|serving\s+[a-z]|locally owned|nearby communities/i.test(lower)
+  const hasServiceArea = /service area|areas we serve|serving\s+[a-z]|locally owned|nearby communities|serves?\s+(?:the\s+)?[a-z]/i.test(homeLower)
   if (!hasServiceArea) {
-    findings.push(finding('service-area', 'trust', 4, 'Service area clarity is weak', 'A local buyer should be able to confirm immediately that the company serves their location.', 'State the primary service area near the top of the page and link to useful location pages where appropriate.' ))
+    findings.push(finding('service-area', 'trust', 4, 'Service area clarity is weak', 'A local buyer should be able to confirm immediately that the company serves their location.', 'State the primary service area near the top of the page and link to useful location pages where appropriate.'))
   } else positives.push('Local service area language is present')
 
   const totalRisk = Math.min(100, findings.reduce((sum, item) => sum + item.points, 0))
@@ -272,8 +378,8 @@ export async function auditWebsite(input: string): Promise<RevenueAuditResult> {
 
   const top = findings.slice(0, 2).map((item) => item.title.toLowerCase())
   const summary = findings.length === 0
-    ? 'No major observable conversion leaks were found in this first pass.'
-    : `The scan found ${findings.length} observable leak${findings.length === 1 ? '' : 's'}. The highest priority issues are ${top.join(' and ')}.`
+    ? `No major observable conversion leaks were found across ${pagesScanned.length} scanned page${pagesScanned.length === 1 ? '' : 's'}.`
+    : `The scan found ${findings.length} observable leak${findings.length === 1 ? '' : 's'} across ${pagesScanned.length} page${pagesScanned.length === 1 ? '' : 's'}. The highest priority issues are ${top.join(' and ')}.`
 
   return {
     url: normalized,
@@ -284,6 +390,7 @@ export async function auditWebsite(input: string): Promise<RevenueAuditResult> {
     responseMs,
     pageTitle,
     metaDescription,
+    pagesScanned,
     findings,
     positives,
     summary,
