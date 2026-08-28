@@ -8,6 +8,7 @@ export default function robots(): MetadataRoute.Robots {
       disallow: [
         '/api/',
         '/audit/report',
+        '/scan',
         '/chat',
         '/debug',
         '/facilities',
