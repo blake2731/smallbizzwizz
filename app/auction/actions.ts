@@ -21,9 +21,14 @@ type LiveItemInput = {
 }
 
 async function currentUserId() {
+  await ensureAuctionSchema()
+
+  if (process.env.VERCEL_ENV === 'preview') {
+    return 'auction-preview-owner'
+  }
+
   const { userId } = await auth()
   if (!userId) throw new Error('Unauthorized')
-  await ensureAuctionSchema()
   return userId
 }
 
