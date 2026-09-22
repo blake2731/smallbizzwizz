@@ -4,7 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   createShopifyDraftOrderAction,
-  getShopifyShippingRatesAction,
+  getShippoShippingRatesAction,
   purchaseShopifyLabelAction,
   refreshShopifyLabelAction,
   saveBuyerContactAction,
@@ -148,12 +148,16 @@ export default function BuyerCard({
   )
   const [shippingRates, setShippingRates] = useState<
     Array<{
-      handle: string
-      title: string
-      code: string
-      source: string
+      rateId: string
+      shipmentId: string
+      provider: string
+      service: string
+      serviceToken: string
       amountCents: number | null
       currencyCode: string
+      estimatedDays: number | null
+      durationTerms: string
+      attributes: string[]
     }>
   >([])
   const [shopifyLabelUrl, setShopifyLabelUrl] = useState(buyer.shopifyLabelUrl ?? '')
@@ -166,28 +170,46 @@ export default function BuyerCard({
   const [shopifyCarrier, setShopifyCarrier] = useState(buyer.shopifyCarrier ?? '')
   const [pending, startTransition] = useTransition()
 
-  function loadShopifyRates() {
+  function loadShippoRates() {
     setMessage('')
     startTransition(() => {
       void (async () => {
         try {
-          const result = await getShopifyShippingRatesAction({
+          const result = await getShippoShippingRatesAction({
             auctionId,
             buyerId: buyer.id,
             weightPounds,
             weightOunces,
+            length,
+            width,
+            height,
             address1,
             address2,
             city,
             state,
             postalCode,
+            phone,
+            email,
             countryCode: 'US',
           })
           setShippingRates(result.rates)
-          setMessage('Shopify shipping rates loaded.')
+          const cheapest = result.rates[0]
+          if (cheapest?.amountCents !== null && cheapest?.amountCents !== undefined) {
+            setShipping((cheapest.amountCents / 100).toFixed(2))
+            setMessage(
+              'Cheapest rate selected: ' +
+                cheapest.provider +
+                ' ' +
+                cheapest.service +
+                ' ' +
+                dollars(cheapest.amountCents),
+            )
+          } else {
+            setMessage('Shippo shipping rates loaded.')
+          }
         } catch (error) {
           setShippingRates([])
-          setMessage(error instanceof Error ? error.message : 'Could not load Shopify shipping rates.')
+          setMessage(error instanceof Error ? error.message : 'Could not load Shippo shipping rates.')
         }
       })()
     })
@@ -702,44 +724,54 @@ export default function BuyerCard({
             <div className={styles.shopifyRatesPanel}>
               <div className={styles.packSectionTitle}>
                 <div>
-                  <strong>Shopify shipping rates</strong>
-                  <small>Uses the saved destination and package weight to price the shipment.</small>
+                  <strong>Live shipping rates</strong>
+                  <small>Shippo compares the available carrier rates using this exact address, weight, and package size.</small>
                 </div>
               </div>
 
               <button
                 className={styles.secondaryAction}
                 type="button"
-                onClick={loadShopifyRates}
+                onClick={loadShippoRates}
                 disabled={
                   pending ||
                   !address1.trim() ||
                   !city.trim() ||
                   !state.trim() ||
                   !postalCode.trim() ||
-                  (!weightPounds.trim() && !weightOunces.trim())
+                  (!weightPounds.trim() && !weightOunces.trim()) ||
+                  !length.trim() ||
+                  !width.trim() ||
+                  !height.trim()
                 }
               >
-                Get Shopify shipping rates
+                Get cheapest shipping rates
               </button>
 
               {shippingRates.length ? (
                 <div className={styles.shippingRateList}>
-                  {shippingRates.map((rate) => (
+                  {shippingRates.map((rate, index) => (
                     <button
                       className={styles.shippingRateButton}
                       type="button"
-                      key={rate.handle}
+                      key={rate.rateId}
                       onClick={() => {
                         if (rate.amountCents === null) return
                         setShipping((rate.amountCents / 100).toFixed(2))
-                        setMessage(rate.title + ' selected for shipping.')
+                        setMessage(rate.provider + ' ' + rate.service + ' selected for shipping.')
                       }}
                       disabled={pending || rate.amountCents === null}
                     >
                       <span>
-                        <strong>{rate.title}</strong>
-                        <small>{rate.source || rate.code}</small>
+                        <strong>
+                          {index === 0 ? 'Cheapest · ' : ''}
+                          {rate.provider} {rate.service}
+                        </strong>
+                        <small>
+                          {rate.estimatedDays !== null
+                            ? String(rate.estimatedDays) + ' estimated days'
+                            : rate.durationTerms || 'Delivery estimate unavailable'}
+                        </small>
                       </span>
                       <b>{dollars(rate.amountCents)}</b>
                     </button>
