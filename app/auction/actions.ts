@@ -6,6 +6,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { db } from '@/lib/db'
 import { shopifyGraphql } from '@/lib/shopify-admin'
+import { resolveShippoOriginAddressId, shippoRequest } from '@/lib/shippo'
 import {
   auctionBuyer,
   auctionCustomerPreference,
@@ -523,6 +524,165 @@ export async function setBuyerShippingAction(input: {
 
   revalidatePath('/auction')
   return { ok: true }
+}
+
+type ShippoRate = {
+  object_id: string
+  amount: string
+  currency: string
+  provider: string
+  provider_image_75?: string
+  provider_image_200?: string
+  servicelevel?: {
+    name?: string
+    token?: string
+  }
+  estimated_days?: number | null
+  duration_terms?: string | null
+  attributes?: string[]
+}
+
+type ShippoShipmentResponse = {
+  object_id: string
+  status?: string
+  rates?: ShippoRate[]
+  messages?: Array<{
+    source?: string
+    code?: string
+    text?: string
+  }>
+}
+
+export async function getShippoShippingRatesAction(input: {
+  auctionId: number
+  buyerId: number
+  weightPounds: string
+  weightOunces: string
+  length: string
+  width: string
+  height: string
+  address1: string
+  address2: string
+  city: string
+  state: string
+  postalCode: string
+  phone?: string
+  email?: string
+  countryCode?: string
+}) {
+  const userId = await currentUserId()
+  await requireAuction(userId, input.auctionId)
+
+  const [buyer] = await db
+    .select()
+    .from(auctionBuyer)
+    .where(and(eq(auctionBuyer.id, input.buyerId), eq(auctionBuyer.auctionId, input.auctionId)))
+    .limit(1)
+
+  if (!buyer) throw new Error('Buyer not found')
+
+  const address1 = input.address1.trim()
+  const address2 = input.address2.trim()
+  const city = input.city.trim()
+  const state = input.state.trim().toUpperCase()
+  const postalCode = input.postalCode.trim()
+  const countryCode = (input.countryCode ?? 'US').trim().toUpperCase() || 'US'
+
+  if (!address1 || !city || !state || !postalCode) {
+    throw new Error('Enter the customer address, city, state, and ZIP first.')
+  }
+
+  const weightPounds = parseWholeNumber(input.weightPounds, 'Weight pounds')
+  const weightOunces = parseWholeNumber(input.weightOunces, 'Weight ounces')
+  if (weightOunces !== null && weightOunces > 15) {
+    throw new Error('Weight ounces must be between 0 and 15')
+  }
+
+  const totalWeightOunces = (weightPounds ?? 0) * 16 + (weightOunces ?? 0)
+  if (totalWeightOunces <= 0) {
+    throw new Error('Enter the package weight before getting shipping rates.')
+  }
+
+  const lengthHundredths = parseDimensionHundredths(input.length, 'Length')
+  const widthHundredths = parseDimensionHundredths(input.width, 'Width')
+  const heightHundredths = parseDimensionHundredths(input.height, 'Height')
+  if (
+    lengthHundredths === null ||
+    widthHundredths === null ||
+    heightHundredths === null
+  ) {
+    throw new Error('Enter all three package dimensions before getting shipping rates.')
+  }
+
+  const originAddressId = await resolveShippoOriginAddressId()
+  const shipment = await shippoRequest<ShippoShipmentResponse>('/shipments/', {
+    method: 'POST',
+    body: JSON.stringify({
+      address_from: originAddressId,
+      address_to: {
+        name: buyer.displayName,
+        street1: address1,
+        street2: address2 || undefined,
+        city,
+        state,
+        zip: postalCode,
+        country: countryCode,
+        phone: input.phone?.trim() || undefined,
+        email: input.email?.trim() || undefined,
+        object_purpose: 'PURCHASE',
+      },
+      parcels: [
+        {
+          length: String(lengthHundredths / 100),
+          width: String(widthHundredths / 100),
+          height: String(heightHundredths / 100),
+          distance_unit: 'in',
+          weight: String(totalWeightOunces),
+          mass_unit: 'oz',
+        },
+      ],
+      object_purpose: 'PURCHASE',
+      async: false,
+    }),
+  })
+
+  const rates = (shipment.rates ?? [])
+    .map((rate) => {
+      const amount = Number(rate.amount)
+      return {
+        rateId: rate.object_id,
+        shipmentId: shipment.object_id,
+        provider: rate.provider,
+        service: rate.servicelevel?.name || rate.servicelevel?.token || 'Shipping',
+        serviceToken: rate.servicelevel?.token || '',
+        amountCents: Number.isFinite(amount) ? Math.round(amount * 100) : null,
+        currencyCode: rate.currency,
+        estimatedDays: rate.estimated_days ?? null,
+        durationTerms: rate.duration_terms ?? '',
+        attributes: rate.attributes ?? [],
+      }
+    })
+    .filter(
+      (rate) =>
+        rate.amountCents !== null &&
+        rate.amountCents >= 0 &&
+        rate.currencyCode.toUpperCase() === 'USD',
+    )
+    .sort((a, b) => (a.amountCents ?? 0) - (b.amountCents ?? 0))
+
+  if (!rates.length) {
+    const detail = (shipment.messages ?? [])
+      .map((message) => message.text)
+      .filter(Boolean)
+      .join('; ')
+    throw new Error(detail || 'Shippo did not return any rates for this package.')
+  }
+
+  return {
+    ok: true,
+    shipmentId: shipment.object_id,
+    rates,
+  }
 }
 
 type ShopifyShippingRatesResponse = {
