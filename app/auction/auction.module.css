@@ -1687,3 +1687,22 @@
   color: #ffffff;
   font-size: 14px;
 }
+
+
+.shopifyOrderStatus {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-radius: 10px;
+  background: rgba(57, 214, 156, 0.08);
+  padding: 10px;
+  color: #6edfb3;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.shopifyOrderStatus strong {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+}
