@@ -80,7 +80,7 @@ export async function ensureLatestAuctionPreview(userId: string) {
         auctionId: auction.id,
         displayName: name,
         normalizedName: normalizeBuyerName(name),
-        privateGroup: false,
+        privateGroup: name === 'Elaine Ressler',
         packageStatus: 'unpacked',
         invoiceStatus: 'not_ready',
       })
@@ -101,4 +101,82 @@ export async function ensureLatestAuctionPreview(userId: string) {
   }
 
   return auction.id
+}
+
+
+export async function resetLatestAuctionPreview(userId: string) {
+  if (process.env.VERCEL_ENV !== 'preview' || userId !== PREVIEW_OWNER) {
+    throw new Error('Preview reset is unavailable.')
+  }
+
+  await ensureAuctionSchema()
+
+  const [auction] = await db
+    .select({ id: auctionSession.id })
+    .from(auctionSession)
+    .where(and(eq(auctionSession.userId, PREVIEW_OWNER), eq(auctionSession.title, TITLE)))
+    .limit(1)
+
+  const auctionId = auction?.id ?? await ensureLatestAuctionPreview(userId)
+  if (!auctionId) throw new Error('Auction not found.')
+
+  await db.delete(auctionItem).where(eq(auctionItem.auctionId, auctionId))
+  await db.delete(auctionBuyer).where(eq(auctionBuyer.auctionId, auctionId))
+
+  await db
+    .update(auctionSession)
+    .set({
+      saleDate: '2026-09-21',
+      status: 'packaging',
+      updatedAt: new Date(),
+    })
+    .where(eq(auctionSession.id, auctionId))
+
+  const names = [...new Set(
+    rows
+      .map((row) => row[1])
+      .filter((name): name is Exclude<typeof name, ''> => Boolean(name)),
+  )]
+  const buyerIdByName = new Map<string, number>()
+
+  for (const name of names) {
+    const [buyer] = await db
+      .insert(auctionBuyer)
+      .values({
+        auctionId,
+        displayName: name,
+        normalizedName: normalizeBuyerName(name),
+        privateGroup: name === 'Elaine Ressler',
+        shippingCents: null,
+        packageStatus: 'unpacked',
+        invoiceStatus: 'not_ready',
+        invoiceMethod: null,
+        shopifyDraftOrderId: null,
+        invoiceSentAt: null,
+        paymentMethod: null,
+        paymentTransactionId: null,
+        paidCents: null,
+        paidAt: null,
+      })
+      .returning({ id: auctionBuyer.id, displayName: auctionBuyer.displayName })
+
+    buyerIdByName.set(buyer.displayName, buyer.id)
+  }
+
+  for (const [itemName, buyerName, priceCents] of rows) {
+    await db.insert(auctionItem).values({
+      auctionId,
+      buyerId: buyerName ? buyerIdByName.get(buyerName) ?? null : null,
+      itemName,
+      priceCents,
+      saleType: 'legacy',
+      status: buyerName ? 'sold' : 'unsold',
+      lastBidAt: null,
+      backupBidderName: null,
+      backupBidCents: null,
+      voidedAt: null,
+    })
+  }
+
+  return auctionId
 }
