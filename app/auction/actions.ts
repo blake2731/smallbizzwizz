@@ -472,6 +472,79 @@ export async function setBuyerInvoiceStatusAction(input: {
   return { ok: true }
 }
 
+export async function setBuyerPaymentAction(input: {
+  auctionId: number
+  buyerId: number
+  paid: boolean
+  paymentMethod?: 'paypal' | 'venmo' | 'meta_pay' | 'shopify' | 'other'
+}) {
+  const userId = await currentUserId()
+  await requireAuction(userId, input.auctionId)
+
+  const [buyer] = await db
+    .select()
+    .from(auctionBuyer)
+    .where(and(eq(auctionBuyer.id, input.buyerId), eq(auctionBuyer.auctionId, input.auctionId)))
+    .limit(1)
+
+  if (!buyer) throw new Error('Buyer not found')
+
+  if (!input.paid) {
+    await db
+      .update(auctionBuyer)
+      .set({
+        paymentMethod: null,
+        paymentTransactionId: null,
+        paidCents: null,
+        paidAt: null,
+        updatedAt: new Date(),
+      })
+      .where(eq(auctionBuyer.id, input.buyerId))
+
+    revalidatePath('/auction')
+    return { ok: true }
+  }
+
+  if (buyer.shippingCents === null) {
+    throw new Error('Enter shipping before marking this invoice paid.')
+  }
+
+  if (!input.paymentMethod) {
+    throw new Error('Choose how the customer paid.')
+  }
+
+  const soldItems = await db
+    .select({ priceCents: auctionItem.priceCents })
+    .from(auctionItem)
+    .where(
+      and(
+        eq(auctionItem.auctionId, input.auctionId),
+        eq(auctionItem.buyerId, input.buyerId),
+        eq(auctionItem.status, 'sold'),
+      ),
+    )
+
+  const subtotalCents = soldItems.reduce((sum, item) => sum + item.priceCents, 0)
+  const discountCents = buyer.privateGroup ? Math.round(subtotalCents * 0.1) : 0
+  const dueCents = subtotalCents - discountCents + buyer.shippingCents
+  const now = new Date()
+
+  await db
+    .update(auctionBuyer)
+    .set({
+      invoiceStatus: 'sent',
+      invoiceSentAt: buyer.invoiceSentAt ?? now,
+      paymentMethod: input.paymentMethod,
+      paidCents: dueCents,
+      paidAt: now,
+      updatedAt: now,
+    })
+    .where(eq(auctionBuyer.id, input.buyerId))
+
+  revalidatePath('/auction')
+  return { ok: true }
+}
+
 export async function saveBuyerContactAction(input: {
   auctionId: number
   buyerId: number
