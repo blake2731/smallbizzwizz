@@ -53,3 +53,58 @@ export async function shippoRequest<T>(
 
   return payload as T
 }
+
+
+type ShippoAddress = {
+  object_id: string
+  name?: string
+  company?: string
+  city?: string
+  state?: string
+  zip?: string
+  country?: string
+  metadata?: string
+}
+
+type ShippoAddressList = {
+  results?: ShippoAddress[]
+}
+
+export async function resolveShippoOriginAddressId() {
+  const explicit = process.env.SHIPPO_FROM_ADDRESS_ID?.trim()
+  if (explicit) return explicit
+
+  const data = await shippoRequest<ShippoAddressList>('/addresses/?results=100')
+  const domestic = (data.results ?? []).filter(
+    (address) => (address.country ?? '').toUpperCase() === 'US',
+  )
+
+  if (domestic.length === 1) {
+    return domestic[0].object_id
+  }
+
+  const likely = domestic.filter((address) => {
+    const haystack = [
+      address.company,
+      address.name,
+      address.metadata,
+    ]
+      .filter(Boolean)
+      .join(' ')
+      .toLowerCase()
+
+    return haystack.includes('crafty brother') || haystack.includes('ship from')
+  })
+
+  if (likely.length === 1) {
+    return likely[0].object_id
+  }
+
+  if (!domestic.length) {
+    throw new Error('No US ship from address was found in Shippo.')
+  }
+
+  throw new Error(
+    'More than one Shippo ship from address is available. Set SHIPPO_FROM_ADDRESS_ID to the one Auction Console should use.',
+  )
+}
