@@ -265,12 +265,30 @@ export async function updateAuctionHighBidAction(input: {
   const buyer = await getOrCreateBuyer(input.auctionId, input.buyerName)
   const previousBuyerId = item.buyerId
 
+  let backupBidderName = item.backupBidderName
+  let backupBidCents = item.backupBidCents
+
+  if (previousBuyerId && previousBuyerId !== buyer.id) {
+    const [previousBuyer] = await db
+      .select({ displayName: auctionBuyer.displayName })
+      .from(auctionBuyer)
+      .where(eq(auctionBuyer.id, previousBuyerId))
+      .limit(1)
+
+    if (previousBuyer) {
+      backupBidderName = previousBuyer.displayName
+      backupBidCents = item.priceCents
+    }
+  }
+
   await db
     .update(auctionItem)
     .set({
       buyerId: buyer.id,
       priceCents: bidCents,
       lastBidAt: new Date(),
+      backupBidderName,
+      backupBidCents,
     })
     .where(eq(auctionItem.id, item.id))
 
