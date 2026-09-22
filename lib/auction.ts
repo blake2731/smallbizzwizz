@@ -9,6 +9,7 @@ import {
   type AuctionBuyer,
   type AuctionCustomerProfile,
   type AuctionItem,
+  type AuctionPackage,
   type AuctionSession,
 } from '@/lib/auction-schema'
 
@@ -252,6 +253,7 @@ export async function ensureAuctionSchema() {
 
 export type AuctionBuyerView = AuctionBuyer & {
   shippingProfile: AuctionCustomerProfile | null
+  packages: AuctionPackage[]
   items: AuctionItem[]
   subtotalCents: number
   discountCents: number
@@ -371,6 +373,7 @@ export async function getAuctionState(userId: string, requestedId?: number | nul
         ...buyer,
         email: buyer.email ?? profile?.email ?? null,
         shippingProfile: profile,
+        packages: [],
         items,
         subtotalCents,
         discountCents,
