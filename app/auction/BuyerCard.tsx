@@ -6,6 +6,7 @@ import {
   saveBuyerContactAction,
   setBuyerInvoiceStatusAction,
   setBuyerPaymentAction,
+  setBuyerPaymentPreferenceAction,
   setBuyerPrivateGroupAction,
   setBuyerShippingAction,
 } from './actions'
@@ -74,8 +75,11 @@ export default function BuyerCard({
   const [packed, setPacked] = useState(buyer.packageStatus === 'packed')
   const [email, setEmail] = useState(buyer.email ?? '')
   const [paymentMethod, setPaymentMethod] = useState(
-    buyer.paymentMethod ?? buyer.preferredPaymentMethod ?? '',
+    buyer.paymentMethod ?? buyer.preferredPaymentMethod ?? 'paypal',
   )
+  const [invoicePaymentPreference, setInvoicePaymentPreference] = useState<
+    'paypal' | 'venmo' | 'meta_pay'
+  >(buyer.preferredPaymentMethod ?? 'paypal')
   const [message, setMessage] = useState('')
   const [copyLabel, setCopyLabel] = useState('Copy invoice for Messenger')
   const [pending, startTransition] = useTransition()
@@ -104,18 +108,15 @@ export default function BuyerCard({
         ? [
             'HOW TO PAY',
             'Venmo: @Justin-Crouse-6',
-            'PayPal is also available: paypal.me/justincrouse2',
           ]
         : buyer.preferredPaymentMethod === 'meta_pay'
           ? [
               'HOW TO PAY',
-              'We have you down as preferring Facebook Pay. Reply here and we’ll accommodate you through Facebook Pay.',
-              'PayPal is also available: paypal.me/justincrouse2',
+              'Facebook Pay: please send through Messenger.',
             ]
           : [
               'HOW TO PAY',
               'PayPal: paypal.me/justincrouse2',
-              'If PayPal isn’t convenient, message us — we can usually accommodate Venmo or Facebook Pay.',
             ]
 
     const invoiceText = [
@@ -344,6 +345,47 @@ export default function BuyerCard({
           >
             Mark Messenger sent
           </button>
+
+          <div className={styles.paymentPanel}>
+            <div className={styles.paymentPanelTitle}>
+              <span>Invoice payment preference</span>
+              <strong>{invoicePaymentPreference === 'paypal' ? 'PAYPAL' : invoicePaymentPreference === 'venmo' ? 'VENMO' : 'FACEBOOK PAY'}</strong>
+            </div>
+            <div className={styles.paymentEntry}>
+              <select
+                className={styles.compactInput}
+                value={invoicePaymentPreference}
+                onChange={(event) =>
+                  setInvoicePaymentPreference(event.target.value as 'paypal' | 'venmo' | 'meta_pay')
+                }
+                disabled={pending}
+              >
+                <option value="paypal">PayPal — default</option>
+                <option value="venmo">Venmo</option>
+                <option value="meta_pay">Facebook Pay</option>
+              </select>
+              <button
+                className={styles.secondaryAction}
+                type="button"
+                onClick={() =>
+                  run(
+                    () =>
+                      setBuyerPaymentPreferenceAction({
+                        auctionId,
+                        buyerId: buyer.id,
+                        method: invoicePaymentPreference,
+                      }),
+                    invoicePaymentPreference === 'paypal'
+                      ? 'Invoice preference reset to PayPal.'
+                      : 'Customer invoice preference saved.',
+                  )
+                }
+                disabled={pending}
+              >
+                Save preference
+              </button>
+            </div>
+          </div>
 
           <div className={styles.paymentPanel}>
             <div className={styles.paymentPanelTitle}>
