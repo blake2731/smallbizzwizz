@@ -1511,3 +1511,101 @@
   font-size: 10px;
   text-align: right;
 }
+
+
+.shippingProfilePanel,
+.packagePanel {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #293243;
+  border-radius: 14px;
+  background: #0a0f16;
+  padding: 14px;
+}
+
+.packSectionTitle {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.packSectionTitle > div {
+  display: grid;
+  gap: 3px;
+}
+
+.packSectionTitle strong {
+  color: #f2f5fa;
+  font-size: 12px;
+}
+
+.packSectionTitle small {
+  color: #788397;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.profileStatus,
+.profileStatusMuted {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 4px 8px;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.profileStatus {
+  background: rgba(57, 214, 156, 0.12);
+  color: #69dbae;
+}
+
+.profileStatusMuted {
+  background: rgba(255, 183, 77, 0.1);
+  color: #d8a85c;
+}
+
+.addressGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
+  gap: 9px;
+}
+
+.packageMeasureGrid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.packageActions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.copyShipmentButton {
+  min-height: 44px;
+  border: 1px solid rgba(101, 113, 255, 0.55);
+  border-radius: 11px;
+  background: rgba(101, 113, 255, 0.12);
+  color: #c7ceff;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.copyShipmentButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+@media (max-width: 760px) {
+  .addressGrid,
+  .packageMeasureGrid,
+  .packageActions {
+    grid-template-columns: 1fr;
+  }
+}
