@@ -2,6 +2,7 @@ import { and, asc, desc, eq, ne, sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import {
   auctionBuyer,
+  auctionCustomerPreference,
   auctionItem,
   auctionSession,
   type AuctionBuyer,
@@ -101,6 +102,22 @@ export async function ensureAuctionSchema() {
       `)
 
       await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS auction_customer_preference (
+          id serial PRIMARY KEY,
+          user_id text NOT NULL,
+          normalized_name text NOT NULL,
+          display_name text NOT NULL,
+          preferred_payment_method text NOT NULL,
+          source text NOT NULL DEFAULT 'observed_payment',
+          updated_at timestamptz NOT NULL DEFAULT now()
+        )
+      `)
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS auction_customer_preference_user_name_unique
+        ON auction_customer_preference (user_id, normalized_name)
+      `)
+
+      await db.execute(sql`
         CREATE TABLE IF NOT EXISTS auction_item (
           id serial PRIMARY KEY,
           auction_id integer NOT NULL REFERENCES auction_session(id) ON DELETE CASCADE,
@@ -148,6 +165,7 @@ export type AuctionBuyerView = AuctionBuyer & {
   subtotalCents: number
   discountCents: number
   dueCents: number | null
+  preferredPaymentMethod: 'venmo' | 'meta_pay' | null
 }
 
 export type KnownBuyer = {
@@ -207,7 +225,7 @@ export async function getAuctionState(userId: string, requestedId?: number | nul
   const auction = auctionRows[0]
   if (!auction) return null
 
-  const [buyers, allItems, buyerHistory] = await Promise.all([
+  const [buyers, allItems, buyerHistory, preferences] = await Promise.all([
     db
       .select()
       .from(auctionBuyer)
@@ -230,9 +248,16 @@ export async function getAuctionState(userId: string, requestedId?: number | nul
       .where(eq(auctionSession.userId, userId))
       .orderBy(desc(auctionBuyer.updatedAt))
       .limit(150),
+    db
+      .select()
+      .from(auctionCustomerPreference)
+      .where(eq(auctionCustomerPreference.userId, userId)),
   ])
 
   const buyerById = new Map(buyers.map((buyer) => [buyer.id, buyer]))
+  const preferenceByName = new Map(
+    preferences.map((preference) => [preference.normalizedName, preference.preferredPaymentMethod]),
+  )
   const buyerViews: AuctionBuyerView[] = buyers
     .map((buyer) => {
       const items = allItems.filter((item) => item.status === 'sold' && item.buyerId === buyer.id)
@@ -249,6 +274,7 @@ export async function getAuctionState(userId: string, requestedId?: number | nul
         subtotalCents,
         discountCents,
         dueCents,
+        preferredPaymentMethod: preferenceByName.get(buyer.normalizedName) ?? null,
       }
     })
     .filter((buyer) => buyer.items.length > 0)
