@@ -310,7 +310,7 @@ export default async function AuctionPage({
               <div>
                 <p className={styles.kicker}>After the live</p>
                 <h2>Packaging</h2>
-                <p>Pack the order, enter the actual shipping charge, and move on.</p>
+                <p>Save the customer address, weigh and measure the package, then move it into shipping.</p>
               </div>
               <div className={styles.packHeaderActions}>
                 <Link
@@ -318,6 +318,12 @@ export default async function AuctionPage({
                   href={'/auction/packing-list?auction=' + auction.id}
                 >
                   🖨 Print packing list
+                </Link>
+                <Link
+                  className={styles.printPackingLink}
+                  href={'/auction/pirate-ship?auction=' + auction.id}
+                >
+                  Export Pirate Ship CSV
                 </Link>
                 <div className={styles.progressText}>
                   {metrics.packedCount} of {metrics.buyerCount} packed
