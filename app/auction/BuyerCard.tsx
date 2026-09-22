@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   createShopifyDraftOrderAction,
+  getShopifyShippingRatesAction,
   saveBuyerContactAction,
   sendShopifyInvoiceAction,
   saveBuyerShippingProfileAction,
@@ -132,7 +133,44 @@ export default function BuyerCard({
   const [shopifyTotalCents, setShopifyTotalCents] = useState(
     buyer.shopifyDraftOrderTotalCents,
   )
+  const [shippingRates, setShippingRates] = useState<
+    Array<{
+      handle: string
+      title: string
+      code: string
+      source: string
+      amountCents: number | null
+      currencyCode: string
+    }>
+  >([])
   const [pending, startTransition] = useTransition()
+
+  function loadShopifyRates() {
+    setMessage('')
+    startTransition(() => {
+      void (async () => {
+        try {
+          const result = await getShopifyShippingRatesAction({
+            auctionId,
+            buyerId: buyer.id,
+            weightPounds,
+            weightOunces,
+            address1,
+            address2,
+            city,
+            state,
+            postalCode,
+            countryCode: 'US',
+          })
+          setShippingRates(result.rates)
+          setMessage('Shopify shipping rates loaded.')
+        } catch (error) {
+          setShippingRates([])
+          setMessage(error instanceof Error ? error.message : 'Could not load Shopify shipping rates.')
+        }
+      })()
+    })
+  }
 
   async function copyShipment() {
     const addressLines = [
@@ -552,6 +590,55 @@ export default function BuyerCard({
                   />
                 </div>
               </label>
+            </div>
+
+            <div className={styles.shopifyRatesPanel}>
+              <div className={styles.packSectionTitle}>
+                <div>
+                  <strong>Shopify shipping rates</strong>
+                  <small>Uses the saved destination and package weight to price the shipment.</small>
+                </div>
+              </div>
+
+              <button
+                className={styles.secondaryAction}
+                type="button"
+                onClick={loadShopifyRates}
+                disabled={
+                  pending ||
+                  !address1.trim() ||
+                  !city.trim() ||
+                  !state.trim() ||
+                  !postalCode.trim() ||
+                  (!weightPounds.trim() && !weightOunces.trim())
+                }
+              >
+                Get Shopify shipping rates
+              </button>
+
+              {shippingRates.length ? (
+                <div className={styles.shippingRateList}>
+                  {shippingRates.map((rate) => (
+                    <button
+                      className={styles.shippingRateButton}
+                      type="button"
+                      key={rate.handle}
+                      onClick={() => {
+                        if (rate.amountCents === null) return
+                        setShipping((rate.amountCents / 100).toFixed(2))
+                        setMessage(rate.title + ' selected for shipping.')
+                      }}
+                      disabled={pending || rate.amountCents === null}
+                    >
+                      <span>
+                        <strong>{rate.title}</strong>
+                        <small>{rate.source || rate.code}</small>
+                      </span>
+                      <b>{dollars(rate.amountCents)}</b>
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
 
             <label className={styles.packCheck}>
