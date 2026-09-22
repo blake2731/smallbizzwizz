@@ -5,10 +5,12 @@ import {
   auctionCustomerPreference,
   auctionCustomerProfile,
   auctionItem,
+  auctionPackage,
   auctionSession,
   type AuctionBuyer,
   type AuctionCustomerProfile,
   type AuctionItem,
+  type AuctionPackage,
   type AuctionSession,
 } from '@/lib/auction-schema'
 
@@ -155,6 +157,73 @@ export async function ensureAuctionSchema() {
       `)
 
       await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS auction_package (
+          id serial PRIMARY KEY,
+          buyer_id integer NOT NULL REFERENCES auction_buyer(id) ON DELETE CASCADE,
+          package_number integer NOT NULL DEFAULT 1,
+          weight_ounces integer,
+          length_hundredths integer,
+          width_hundredths integer,
+          height_hundredths integer,
+          shipping_cents integer,
+          status text NOT NULL DEFAULT 'unpacked',
+          shopify_label_purchase_result_id text,
+          shopify_label_url text,
+          shopify_tracking_number text,
+          shopify_tracking_url text,
+          shopify_carrier text,
+          shopify_label_purchased_at timestamptz,
+          created_at timestamptz NOT NULL DEFAULT now(),
+          updated_at timestamptz NOT NULL DEFAULT now()
+        )
+      `)
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS auction_package_buyer_number_unique
+        ON auction_package (buyer_id, package_number)
+      `)
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS auction_package_buyer_status_idx
+        ON auction_package (buyer_id, status)
+      `)
+      await db.execute(sql`
+        INSERT INTO auction_package (
+          buyer_id,
+          package_number,
+          weight_ounces,
+          length_hundredths,
+          width_hundredths,
+          height_hundredths,
+          shipping_cents,
+          status,
+          shopify_label_purchase_result_id,
+          shopify_label_url,
+          shopify_tracking_number,
+          shopify_tracking_url,
+          shopify_carrier,
+          shopify_label_purchased_at
+        )
+        SELECT
+          b.id,
+          1,
+          b.package_weight_ounces,
+          b.package_length_hundredths,
+          b.package_width_hundredths,
+          b.package_height_hundredths,
+          b.shipping_cents,
+          b.package_status,
+          b.shopify_label_purchase_result_id,
+          b.shopify_label_url,
+          b.shopify_tracking_number,
+          b.shopify_tracking_url,
+          b.shopify_carrier,
+          b.shopify_label_purchased_at
+        FROM auction_buyer b
+        WHERE NOT EXISTS (
+          SELECT 1 FROM auction_package p WHERE p.buyer_id = b.id
+        )
+      `)
+
+      await db.execute(sql`
         CREATE TABLE IF NOT EXISTS auction_customer_profile (
           id serial PRIMARY KEY,
           user_id text NOT NULL,
@@ -202,6 +271,7 @@ export async function ensureAuctionSchema() {
           id serial PRIMARY KEY,
           auction_id integer NOT NULL REFERENCES auction_session(id) ON DELETE CASCADE,
           buyer_id integer REFERENCES auction_buyer(id) ON DELETE SET NULL,
+          package_id integer REFERENCES auction_package(id) ON DELETE SET NULL,
           item_name text NOT NULL,
           price_cents integer NOT NULL,
           sale_type text NOT NULL DEFAULT 'quick',
@@ -212,6 +282,10 @@ export async function ensureAuctionSchema() {
           voided_at timestamptz,
           created_at timestamptz NOT NULL DEFAULT now()
         )
+      `)
+      await db.execute(sql`
+        ALTER TABLE auction_item
+        ADD COLUMN IF NOT EXISTS package_id integer REFERENCES auction_package(id) ON DELETE SET NULL
       `)
       await db.execute(sql`
         ALTER TABLE auction_item
@@ -252,6 +326,7 @@ export async function ensureAuctionSchema() {
 
 export type AuctionBuyerView = AuctionBuyer & {
   shippingProfile: AuctionCustomerProfile | null
+  packages: AuctionPackage[]
   items: AuctionItem[]
   subtotalCents: number
   discountCents: number
@@ -316,7 +391,18 @@ export async function getAuctionState(userId: string, requestedId?: number | nul
   const auction = auctionRows[0]
   if (!auction) return null
 
-  const [buyers, allItems, buyerHistory, preferences, profiles] = await Promise.all([
+  await db.execute(sql`
+    INSERT INTO auction_package (buyer_id, package_number)
+    SELECT b.id, 1
+    FROM auction_buyer b
+    WHERE b.auction_id = ${auction.id}
+      AND NOT EXISTS (
+        SELECT 1 FROM auction_package p WHERE p.buyer_id = b.id
+      )
+    ON CONFLICT (buyer_id, package_number) DO NOTHING
+  `)
+
+  const [buyers, allItems, buyerHistory, preferences, profiles, packages] = await Promise.all([
     db
       .select()
       .from(auctionBuyer)
@@ -347,6 +433,12 @@ export async function getAuctionState(userId: string, requestedId?: number | nul
       .select()
       .from(auctionCustomerProfile)
       .where(eq(auctionCustomerProfile.userId, userId)),
+    db
+      .select({ package: auctionPackage })
+      .from(auctionPackage)
+      .innerJoin(auctionBuyer, eq(auctionPackage.buyerId, auctionBuyer.id))
+      .where(eq(auctionBuyer.auctionId, auction.id))
+      .orderBy(asc(auctionPackage.packageNumber)),
   ])
 
   const buyerById = new Map(buyers.map((buyer) => [buyer.id, buyer]))
@@ -359,6 +451,10 @@ export async function getAuctionState(userId: string, requestedId?: number | nul
   const buyerViews: AuctionBuyerView[] = buyers
     .map((buyer) => {
       const profile = profileByName.get(buyer.normalizedName) ?? null
+      const buyerPackages = packages
+        .map((row) => row.package)
+        .filter((pkg) => pkg.buyerId === buyer.id)
+        .sort((a, b) => a.packageNumber - b.packageNumber)
       const items = allItems.filter((item) => item.status === 'sold' && item.buyerId === buyer.id)
       const subtotalCents = items.reduce((sum, item) => sum + item.priceCents, 0)
       const discountCents = buyer.privateGroup ? Math.round(subtotalCents * 0.1) : 0
@@ -371,6 +467,11 @@ export async function getAuctionState(userId: string, requestedId?: number | nul
         ...buyer,
         email: buyer.email ?? profile?.email ?? null,
         shippingProfile: profile,
+        packages: buyerPackages,
+        packageStatus:
+          buyerPackages.length > 0 && buyerPackages.every((pkg) => pkg.status === 'packed')
+            ? 'packed'
+            : 'unpacked',
         items,
         subtotalCents,
         discountCents,
