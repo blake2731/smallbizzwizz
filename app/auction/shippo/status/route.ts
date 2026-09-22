@@ -42,6 +42,8 @@ export async function GET() {
     const addresses = (data.results ?? []).map((address) => ({
       id: address.object_id,
       name: address.company || address.name || '',
+      street1: address.street1 || '',
+      street2: address.street2 || '',
       city: address.city || '',
       state: address.state || '',
       zip: address.zip || '',
