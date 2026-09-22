@@ -1627,3 +1627,63 @@
   padding: 0 13px;
   text-decoration: none;
 }
+
+
+.shopifyRatesPanel {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #293243;
+  border-radius: 14px;
+  background: #0a0f16;
+  padding: 14px;
+}
+
+.shippingRateList {
+  display: grid;
+  gap: 8px;
+}
+
+.shippingRateButton {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 54px;
+  border: 1px solid #30394a;
+  border-radius: 12px;
+  background: #101620;
+  padding: 9px 12px;
+  color: #eef1f7;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.shippingRateButton:hover {
+  border-color: #6571ff;
+  background: rgba(101, 113, 255, 0.08);
+}
+
+.shippingRateButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.shippingRateButton > span {
+  display: grid;
+  gap: 3px;
+}
+
+.shippingRateButton strong {
+  font-size: 12px;
+}
+
+.shippingRateButton small {
+  color: #7f899d;
+  font-size: 9px;
+}
+
+.shippingRateButton b {
+  color: #ffffff;
+  font-size: 14px;
+}
