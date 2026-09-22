@@ -145,11 +145,18 @@ export default function LiveEntry({
     )
   }
 
-  function buyerChips(onSelect: (name: string) => void) {
+  function buyerChips(onSelect: (name: string) => void, query: string) {
     if (!recentBuyers.length) return null
+    const normalizedQuery = query.trim().toLowerCase()
+    const visibleBuyers = normalizedQuery
+      ? recentBuyers.filter((buyer) => buyer.displayName.toLowerCase().includes(normalizedQuery))
+      : recentBuyers
+
+    if (!visibleBuyers.length) return null
+
     return (
       <div className={styles.recentBuyers} aria-label="Known buyers">
-        {recentBuyers.map((buyer) => (
+        {visibleBuyers.map((buyer) => (
           <button
             key={buyer.id + '-' + buyer.displayName}
             className={styles.buyerChip}
@@ -230,7 +237,7 @@ export default function LiveEntry({
             />
           </label>
 
-          {buyerChips(setBuyerName)}
+          {buyerChips(setBuyerName, buyerName)}
 
           <div className={styles.priceRow}>
             <label className={styles.fieldGroup}>
@@ -300,7 +307,7 @@ export default function LiveEntry({
               />
             </label>
 
-            {buyerChips(setBidderName)}
+            {buyerChips(setBidderName, bidderName)}
 
             <label className={styles.fieldGroup}>
               <span>New high bid</span>
