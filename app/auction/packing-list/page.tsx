@@ -49,6 +49,12 @@ export default async function PackingListPage({
   const { auction } = state
   const buyers = [...state.buyers].sort((a, b) => a.displayName.localeCompare(b.displayName))
   const soldItemCount = buyers.reduce((sum, buyer) => sum + buyer.items.length, 0)
+  const densityClass =
+    buyers.length > 34 || soldItemCount > 78
+      ? styles.densityFive
+      : buyers.length > 22 || soldItemCount > 48
+        ? styles.densityFour
+        : styles.densityThree
 
   return (
     <main className={styles.screen}>
@@ -71,11 +77,11 @@ export default async function PackingListPage({
           <div className={styles.headerStats}>
             <div><strong>{buyers.length}</strong><span>Buyers</span></div>
             <div><strong>{soldItemCount}</strong><span>Items</span></div>
-            <div><strong>{state.metrics.packedCount}</strong><span>Packed</span></div>
+            <div><strong>{money(state.metrics.soldCents)}</strong><span>Merchandise</span></div>
           </div>
         </header>
 
-        <div className={styles.columns}>
+        <div className={styles.columns + ' ' + densityClass}>
           {buyers.map((buyer) => {
             const grouped = groupItems(buyer.items)
             return (
@@ -89,7 +95,7 @@ export default async function PackingListPage({
                       {buyer.privateGroup ? ' · PG' : ''}
                     </span>
                   </div>
-                  <div className={styles.packedLabel}>PACKED</div>
+                  <div className={styles.buyerTotal}>{money(buyer.subtotalCents)}</div>
                 </div>
 
                 <ul className={styles.items}>
@@ -102,13 +108,6 @@ export default async function PackingListPage({
                   ))}
                 </ul>
 
-                <div className={styles.footerLine}>
-                  <span>
-                    Shipping:{' '}
-                    <strong>{buyer.shippingCents === null ? '__________' : money(buyer.shippingCents)}</strong>
-                  </span>
-                  <span className={styles.notes}>Notes: ____________________</span>
-                </div>
               </article>
             )
           })}
@@ -116,8 +115,7 @@ export default async function PackingListPage({
 
         <footer className={styles.sheetFooter}>
           <span>□ All buyers packed</span>
-          <span>□ Shipping entered</span>
-          <span>□ Ready to invoice</span>
+          <span>{buyers.length} buyers · {soldItemCount} items · {money(state.metrics.soldCents)} merchandise</span>
         </footer>
       </section>
     </main>
