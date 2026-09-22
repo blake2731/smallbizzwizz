@@ -6,11 +6,13 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { db } from '@/lib/db'
 import { shopifyGraphql } from '@/lib/shopify-admin'
+import { resolveShippoOriginAddressId, shippoRequest } from '@/lib/shippo'
 import {
   auctionBuyer,
   auctionCustomerPreference,
   auctionCustomerProfile,
   auctionItem,
+  auctionPackage,
   auctionSession,
 } from '@/lib/auction-schema'
 import {
@@ -449,6 +451,479 @@ function parseDimensionHundredths(value: string, label: string) {
   return Math.round(number * 100)
 }
 
+async function syncBuyerPackageSummary(buyerId: number) {
+  const packages = await db
+    .select()
+    .from(auctionPackage)
+    .where(eq(auctionPackage.buyerId, buyerId))
+    .orderBy(auctionPackage.packageNumber)
+
+  if (!packages.length) return
+
+  const allShippingReady = packages.every((pkg) => pkg.shippingCents !== null)
+  const shippingCents = allShippingReady
+    ? packages.reduce((sum, pkg) => sum + (pkg.shippingCents ?? 0), 0)
+    : null
+  const packageStatus = packages.every((pkg) => pkg.status === 'packed')
+    ? 'packed'
+    : 'unpacked'
+  const sole = packages.length === 1 ? packages[0] : null
+
+  const [buyer] = await db
+    .select()
+    .from(auctionBuyer)
+    .where(eq(auctionBuyer.id, buyerId))
+    .limit(1)
+
+  if (!buyer) return
+
+  const invoiceStatus =
+    shippingCents === null
+      ? buyer.invoiceStatus === 'sent' || buyer.invoiceStatus === 'paid'
+        ? buyer.invoiceStatus
+        : 'not_ready'
+      : buyer.invoiceStatus === 'sent' || buyer.invoiceStatus === 'paid'
+        ? buyer.invoiceStatus
+        : 'ready'
+
+  await db
+    .update(auctionBuyer)
+    .set({
+      shippingCents,
+      packageStatus,
+      packageWeightOunces: sole?.weightOunces ?? null,
+      packageLengthHundredths: sole?.lengthHundredths ?? null,
+      packageWidthHundredths: sole?.widthHundredths ?? null,
+      packageHeightHundredths: sole?.heightHundredths ?? null,
+      invoiceStatus,
+      updatedAt: new Date(),
+    })
+    .where(eq(auctionBuyer.id, buyerId))
+}
+
+async function requireBuyerPackage(
+  auctionId: number,
+  buyerId: number,
+  packageId: number,
+) {
+  const [buyer] = await db
+    .select({ id: auctionBuyer.id })
+    .from(auctionBuyer)
+    .where(and(eq(auctionBuyer.id, buyerId), eq(auctionBuyer.auctionId, auctionId)))
+    .limit(1)
+
+  if (!buyer) throw new Error('Buyer not found')
+
+  const [pkg] = await db
+    .select()
+    .from(auctionPackage)
+    .where(and(eq(auctionPackage.id, packageId), eq(auctionPackage.buyerId, buyerId)))
+    .limit(1)
+
+  if (!pkg) throw new Error('Package not found')
+  return pkg
+}
+
+export async function addAuctionPackageAction(input: {
+  auctionId: number
+  buyerId: number
+}) {
+  const userId = await currentUserId()
+  await requireAuction(userId, input.auctionId)
+
+  const [buyer] = await db
+    .select({ id: auctionBuyer.id })
+    .from(auctionBuyer)
+    .where(and(eq(auctionBuyer.id, input.buyerId), eq(auctionBuyer.auctionId, input.auctionId)))
+    .limit(1)
+
+  if (!buyer) throw new Error('Buyer not found')
+
+  const packages = await db
+    .select()
+    .from(auctionPackage)
+    .where(eq(auctionPackage.buyerId, input.buyerId))
+    .orderBy(desc(auctionPackage.packageNumber))
+
+  const nextNumber = (packages[0]?.packageNumber ?? 0) + 1
+  const [created] = await db
+    .insert(auctionPackage)
+    .values({
+      buyerId: input.buyerId,
+      packageNumber: nextNumber,
+    })
+    .returning()
+
+  await syncBuyerPackageSummary(input.buyerId)
+  revalidatePath('/auction')
+
+  return {
+    ok: true,
+    packageId: created.id,
+    packageNumber: created.packageNumber,
+  }
+}
+
+export async function removeAuctionPackageAction(input: {
+  auctionId: number
+  buyerId: number
+  packageId: number
+}) {
+  const userId = await currentUserId()
+  await requireAuction(userId, input.auctionId)
+  const pkg = await requireBuyerPackage(input.auctionId, input.buyerId, input.packageId)
+
+  const packages = await db
+    .select()
+    .from(auctionPackage)
+    .where(eq(auctionPackage.buyerId, input.buyerId))
+    .orderBy(auctionPackage.packageNumber)
+
+  if (packages.length <= 1) {
+    throw new Error('Each buyer must keep at least one package.')
+  }
+
+  if (pkg.shippoTransactionId || pkg.shippoLabelUrl) {
+    throw new Error('A package with a purchased label cannot be removed.')
+  }
+
+  const fallback = packages.find((candidate) => candidate.id !== pkg.id)
+  if (!fallback) throw new Error('No fallback package found.')
+
+  await db
+    .update(auctionItem)
+    .set({ packageId: fallback.id })
+    .where(and(eq(auctionItem.buyerId, input.buyerId), eq(auctionItem.packageId, pkg.id)))
+
+  await db.delete(auctionPackage).where(eq(auctionPackage.id, pkg.id))
+  await syncBuyerPackageSummary(input.buyerId)
+  revalidatePath('/auction')
+
+  return { ok: true }
+}
+
+export async function assignAuctionItemPackageAction(input: {
+  auctionId: number
+  buyerId: number
+  itemId: number
+  packageId: number
+}) {
+  const userId = await currentUserId()
+  await requireAuction(userId, input.auctionId)
+  await requireBuyerPackage(input.auctionId, input.buyerId, input.packageId)
+
+  const [item] = await db
+    .select()
+    .from(auctionItem)
+    .where(
+      and(
+        eq(auctionItem.id, input.itemId),
+        eq(auctionItem.auctionId, input.auctionId),
+        eq(auctionItem.buyerId, input.buyerId),
+        eq(auctionItem.status, 'sold'),
+      ),
+    )
+    .limit(1)
+
+  if (!item) throw new Error('Item not found')
+
+  await db
+    .update(auctionItem)
+    .set({ packageId: input.packageId })
+    .where(eq(auctionItem.id, input.itemId))
+
+  revalidatePath('/auction')
+  return { ok: true }
+}
+
+export async function saveAuctionPackageAction(input: {
+  auctionId: number
+  buyerId: number
+  packageId: number
+  shipping: string
+  packed: boolean
+  weightPounds: string
+  weightOunces: string
+  length: string
+  width: string
+  height: string
+}) {
+  const userId = await currentUserId()
+  await requireAuction(userId, input.auctionId)
+  const current = await requireBuyerPackage(input.auctionId, input.buyerId, input.packageId)
+
+  const shippingCents = input.shipping.trim() ? parseMoneyToCents(input.shipping) : null
+  if (input.shipping.trim() && shippingCents === null) {
+    throw new Error('Enter valid shipping')
+  }
+
+  const weightPounds = parseWholeNumber(input.weightPounds, 'Weight pounds')
+  const weightOunces = parseWholeNumber(input.weightOunces, 'Weight ounces')
+  if (weightOunces !== null && weightOunces > 15) {
+    throw new Error('Weight ounces must be between 0 and 15')
+  }
+
+  const totalWeightOunces =
+    weightPounds === null && weightOunces === null
+      ? null
+      : (weightPounds ?? 0) * 16 + (weightOunces ?? 0)
+
+  const lengthHundredths = parseDimensionHundredths(input.length, 'Length')
+  const widthHundredths = parseDimensionHundredths(input.width, 'Width')
+  const heightHundredths = parseDimensionHundredths(input.height, 'Height')
+
+  if (input.packed) {
+    if (!totalWeightOunces || totalWeightOunces <= 0) {
+      throw new Error('Enter the package weight before marking it packed')
+    }
+    if (
+      lengthHundredths === null ||
+      widthHundredths === null ||
+      heightHundredths === null
+    ) {
+      throw new Error('Enter all three package dimensions before marking it packed')
+    }
+  }
+
+  const measurementsChanged =
+    current.weightOunces !== totalWeightOunces ||
+    current.lengthHundredths !== lengthHundredths ||
+    current.widthHundredths !== widthHundredths ||
+    current.heightHundredths !== heightHundredths
+
+  await db
+    .update(auctionPackage)
+    .set({
+      shippingCents,
+      weightOunces: totalWeightOunces,
+      lengthHundredths,
+      widthHundredths,
+      heightHundredths,
+      status: input.packed ? 'packed' : 'unpacked',
+      ...(measurementsChanged
+        ? {
+            shippoShipmentId: null,
+            shippoRateId: null,
+            shippoProvider: null,
+            shippoService: null,
+            shippoRateCents: null,
+            shippoQuotedAt: null,
+          }
+        : {}),
+      updatedAt: new Date(),
+    })
+    .where(eq(auctionPackage.id, input.packageId))
+
+  await syncBuyerPackageSummary(input.buyerId)
+  revalidatePath('/auction')
+  return { ok: true }
+}
+
+export async function getShippoPackageRatesAction(input: {
+  auctionId: number
+  buyerId: number
+  packageId: number
+  weightPounds: string
+  weightOunces: string
+  length: string
+  width: string
+  height: string
+  address1: string
+  address2: string
+  city: string
+  state: string
+  postalCode: string
+  phone?: string
+  email?: string
+  countryCode?: string
+}) {
+  const userId = await currentUserId()
+  await requireAuction(userId, input.auctionId)
+  await requireBuyerPackage(input.auctionId, input.buyerId, input.packageId)
+
+  const [buyer] = await db
+    .select()
+    .from(auctionBuyer)
+    .where(and(eq(auctionBuyer.id, input.buyerId), eq(auctionBuyer.auctionId, input.auctionId)))
+    .limit(1)
+
+  if (!buyer) throw new Error('Buyer not found')
+
+  const address1 = input.address1.trim()
+  const address2 = input.address2.trim()
+  const city = input.city.trim()
+  const state = input.state.trim().toUpperCase()
+  const postalCode = input.postalCode.trim()
+  const countryCode = (input.countryCode ?? 'US').trim().toUpperCase() || 'US'
+
+  if (!address1 || !city || !state || !postalCode) {
+    throw new Error('Enter the customer address, city, state, and ZIP first.')
+  }
+
+  const weightPounds = parseWholeNumber(input.weightPounds, 'Weight pounds')
+  const weightOunces = parseWholeNumber(input.weightOunces, 'Weight ounces')
+  if (weightOunces !== null && weightOunces > 15) {
+    throw new Error('Weight ounces must be between 0 and 15')
+  }
+
+  const totalWeightOunces = (weightPounds ?? 0) * 16 + (weightOunces ?? 0)
+  if (totalWeightOunces <= 0) {
+    throw new Error('Enter the package weight before getting shipping rates.')
+  }
+
+  const lengthHundredths = parseDimensionHundredths(input.length, 'Length')
+  const widthHundredths = parseDimensionHundredths(input.width, 'Width')
+  const heightHundredths = parseDimensionHundredths(input.height, 'Height')
+  if (
+    lengthHundredths === null ||
+    widthHundredths === null ||
+    heightHundredths === null
+  ) {
+    throw new Error('Enter all three package dimensions before getting shipping rates.')
+  }
+
+  const originAddressId = await resolveShippoOriginAddressId()
+  const shipment = await shippoRequest<ShippoShipmentResponse>('/shipments/', {
+    method: 'POST',
+    body: JSON.stringify({
+      address_from: originAddressId,
+      address_to: {
+        name: buyer.displayName,
+        street1: address1,
+        street2: address2 || undefined,
+        city,
+        state,
+        zip: postalCode,
+        country: countryCode,
+        phone: input.phone?.trim() || undefined,
+        email: input.email?.trim() || undefined,
+        object_purpose: 'PURCHASE',
+      },
+      parcels: [
+        {
+          length: String(lengthHundredths / 100),
+          width: String(widthHundredths / 100),
+          height: String(heightHundredths / 100),
+          distance_unit: 'in',
+          weight: String(totalWeightOunces),
+          mass_unit: 'oz',
+        },
+      ],
+      object_purpose: 'PURCHASE',
+      async: false,
+    }),
+  })
+
+  const rates = (shipment.rates ?? [])
+    .map((rate) => {
+      const amount = Number(rate.amount)
+      return {
+        rateId: rate.object_id,
+        shipmentId: shipment.object_id,
+        provider: rate.provider,
+        service: rate.servicelevel?.name || rate.servicelevel?.token || 'Shipping',
+        serviceToken: rate.servicelevel?.token || '',
+        amountCents: Number.isFinite(amount) ? Math.round(amount * 100) : null,
+        currencyCode: rate.currency,
+        estimatedDays: rate.estimated_days ?? null,
+        durationTerms: rate.duration_terms ?? '',
+        attributes: rate.attributes ?? [],
+      }
+    })
+    .filter(
+      (rate) =>
+        rate.amountCents !== null &&
+        rate.amountCents >= 0 &&
+        rate.currencyCode.toUpperCase() === 'USD',
+    )
+    .sort((a, b) => (a.amountCents ?? 0) - (b.amountCents ?? 0))
+
+  if (!rates.length) {
+    const detail = (shipment.messages ?? [])
+      .map((message) => message.text)
+      .filter(Boolean)
+      .join('; ')
+    throw new Error(detail || 'Shippo did not return any rates for this package.')
+  }
+
+  return {
+    ok: true,
+    shipmentId: shipment.object_id,
+    rates,
+  }
+}
+
+export async function selectShippoPackageRateAction(input: {
+  auctionId: number
+  buyerId: number
+  packageId: number
+  shipmentId: string
+  rateId: string
+  provider: string
+  service: string
+  amountCents: number
+  packed: boolean
+  weightPounds: string
+  weightOunces: string
+  length: string
+  width: string
+  height: string
+}) {
+  const userId = await currentUserId()
+  await requireAuction(userId, input.auctionId)
+  await requireBuyerPackage(input.auctionId, input.buyerId, input.packageId)
+
+  if (!input.shipmentId.trim() || !input.rateId.trim()) {
+    throw new Error('Select a valid Shippo rate.')
+  }
+  if (!Number.isSafeInteger(input.amountCents) || input.amountCents < 0) {
+    throw new Error('Select a valid Shippo rate amount.')
+  }
+
+  const weightPounds = parseWholeNumber(input.weightPounds, 'Weight pounds')
+  const weightOunces = parseWholeNumber(input.weightOunces, 'Weight ounces')
+  if (weightOunces !== null && weightOunces > 15) {
+    throw new Error('Weight ounces must be between 0 and 15')
+  }
+  const totalWeightOunces = (weightPounds ?? 0) * 16 + (weightOunces ?? 0)
+  if (totalWeightOunces <= 0) throw new Error('Enter the package weight.')
+
+  const lengthHundredths = parseDimensionHundredths(input.length, 'Length')
+  const widthHundredths = parseDimensionHundredths(input.width, 'Width')
+  const heightHundredths = parseDimensionHundredths(input.height, 'Height')
+  if (
+    lengthHundredths === null ||
+    widthHundredths === null ||
+    heightHundredths === null
+  ) {
+    throw new Error('Enter all three package dimensions.')
+  }
+
+  await db
+    .update(auctionPackage)
+    .set({
+      weightOunces: totalWeightOunces,
+      lengthHundredths,
+      widthHundredths,
+      heightHundredths,
+      shippingCents: input.amountCents,
+      status: input.packed ? 'packed' : 'unpacked',
+      shippoShipmentId: input.shipmentId.trim(),
+      shippoRateId: input.rateId.trim(),
+      shippoProvider: input.provider.trim(),
+      shippoService: input.service.trim(),
+      shippoRateCents: input.amountCents,
+      shippoQuotedAt: new Date(),
+      updatedAt: new Date(),
+    })
+    .where(eq(auctionPackage.id, input.packageId))
+
+  await syncBuyerPackageSummary(input.buyerId)
+  revalidatePath('/auction')
+
+  return { ok: true }
+}
+
 export async function setBuyerShippingAction(input: {
   auctionId: number
   buyerId: number
@@ -523,6 +998,165 @@ export async function setBuyerShippingAction(input: {
 
   revalidatePath('/auction')
   return { ok: true }
+}
+
+type ShippoRate = {
+  object_id: string
+  amount: string
+  currency: string
+  provider: string
+  provider_image_75?: string
+  provider_image_200?: string
+  servicelevel?: {
+    name?: string
+    token?: string
+  }
+  estimated_days?: number | null
+  duration_terms?: string | null
+  attributes?: string[]
+}
+
+type ShippoShipmentResponse = {
+  object_id: string
+  status?: string
+  rates?: ShippoRate[]
+  messages?: Array<{
+    source?: string
+    code?: string
+    text?: string
+  }>
+}
+
+export async function getShippoShippingRatesAction(input: {
+  auctionId: number
+  buyerId: number
+  weightPounds: string
+  weightOunces: string
+  length: string
+  width: string
+  height: string
+  address1: string
+  address2: string
+  city: string
+  state: string
+  postalCode: string
+  phone?: string
+  email?: string
+  countryCode?: string
+}) {
+  const userId = await currentUserId()
+  await requireAuction(userId, input.auctionId)
+
+  const [buyer] = await db
+    .select()
+    .from(auctionBuyer)
+    .where(and(eq(auctionBuyer.id, input.buyerId), eq(auctionBuyer.auctionId, input.auctionId)))
+    .limit(1)
+
+  if (!buyer) throw new Error('Buyer not found')
+
+  const address1 = input.address1.trim()
+  const address2 = input.address2.trim()
+  const city = input.city.trim()
+  const state = input.state.trim().toUpperCase()
+  const postalCode = input.postalCode.trim()
+  const countryCode = (input.countryCode ?? 'US').trim().toUpperCase() || 'US'
+
+  if (!address1 || !city || !state || !postalCode) {
+    throw new Error('Enter the customer address, city, state, and ZIP first.')
+  }
+
+  const weightPounds = parseWholeNumber(input.weightPounds, 'Weight pounds')
+  const weightOunces = parseWholeNumber(input.weightOunces, 'Weight ounces')
+  if (weightOunces !== null && weightOunces > 15) {
+    throw new Error('Weight ounces must be between 0 and 15')
+  }
+
+  const totalWeightOunces = (weightPounds ?? 0) * 16 + (weightOunces ?? 0)
+  if (totalWeightOunces <= 0) {
+    throw new Error('Enter the package weight before getting shipping rates.')
+  }
+
+  const lengthHundredths = parseDimensionHundredths(input.length, 'Length')
+  const widthHundredths = parseDimensionHundredths(input.width, 'Width')
+  const heightHundredths = parseDimensionHundredths(input.height, 'Height')
+  if (
+    lengthHundredths === null ||
+    widthHundredths === null ||
+    heightHundredths === null
+  ) {
+    throw new Error('Enter all three package dimensions before getting shipping rates.')
+  }
+
+  const originAddressId = await resolveShippoOriginAddressId()
+  const shipment = await shippoRequest<ShippoShipmentResponse>('/shipments/', {
+    method: 'POST',
+    body: JSON.stringify({
+      address_from: originAddressId,
+      address_to: {
+        name: buyer.displayName,
+        street1: address1,
+        street2: address2 || undefined,
+        city,
+        state,
+        zip: postalCode,
+        country: countryCode,
+        phone: input.phone?.trim() || undefined,
+        email: input.email?.trim() || undefined,
+        object_purpose: 'PURCHASE',
+      },
+      parcels: [
+        {
+          length: String(lengthHundredths / 100),
+          width: String(widthHundredths / 100),
+          height: String(heightHundredths / 100),
+          distance_unit: 'in',
+          weight: String(totalWeightOunces),
+          mass_unit: 'oz',
+        },
+      ],
+      object_purpose: 'PURCHASE',
+      async: false,
+    }),
+  })
+
+  const rates = (shipment.rates ?? [])
+    .map((rate) => {
+      const amount = Number(rate.amount)
+      return {
+        rateId: rate.object_id,
+        shipmentId: shipment.object_id,
+        provider: rate.provider,
+        service: rate.servicelevel?.name || rate.servicelevel?.token || 'Shipping',
+        serviceToken: rate.servicelevel?.token || '',
+        amountCents: Number.isFinite(amount) ? Math.round(amount * 100) : null,
+        currencyCode: rate.currency,
+        estimatedDays: rate.estimated_days ?? null,
+        durationTerms: rate.duration_terms ?? '',
+        attributes: rate.attributes ?? [],
+      }
+    })
+    .filter(
+      (rate) =>
+        rate.amountCents !== null &&
+        rate.amountCents >= 0 &&
+        rate.currencyCode.toUpperCase() === 'USD',
+    )
+    .sort((a, b) => (a.amountCents ?? 0) - (b.amountCents ?? 0))
+
+  if (!rates.length) {
+    const detail = (shipment.messages ?? [])
+      .map((message) => message.text)
+      .filter(Boolean)
+      .join('; ')
+    throw new Error(detail || 'Shippo did not return any rates for this package.')
+  }
+
+  return {
+    ok: true,
+    shipmentId: shipment.object_id,
+    rates,
+  }
 }
 
 type ShopifyShippingRatesResponse = {

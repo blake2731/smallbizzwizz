@@ -1716,3 +1716,60 @@
   background: rgba(57, 214, 156, 0.05);
   padding: 11px;
 }
+
+
+.multiPackageSection {
+  display: grid;
+  gap: 12px;
+}
+
+.multiPackageHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid #293243;
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.packageHeaderActions,
+.packageHeaderBadges {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.packageStack,
+.packageContentsPanel,
+.packageItemAssignments {
+  display: grid;
+  gap: 10px;
+}
+
+.packageItemAssignment {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 150px;
+  align-items: center;
+  gap: 10px;
+}
+
+.dangerAction {
+  min-height: 44px;
+  border: 1px solid rgba(255, 100, 100, 0.42);
+  border-radius: 11px;
+  background: rgba(255, 100, 100, 0.08);
+  padding: 0 13px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+@media (max-width: 760px) {
+  .multiPackageHeader,
+  .packageHeaderActions,
+  .packageItemAssignment {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+}

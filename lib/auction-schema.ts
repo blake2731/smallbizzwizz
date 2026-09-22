@@ -129,6 +129,42 @@ export const auctionCustomerPreference = pgTable(
   ],
 )
 
+export const auctionPackage = pgTable(
+  'auction_package',
+  {
+    id: serial('id').primaryKey(),
+    buyerId: integer('buyer_id')
+      .notNull()
+      .references(() => auctionBuyer.id, { onDelete: 'cascade' }),
+    packageNumber: integer('package_number').notNull().default(1),
+    weightOunces: integer('weight_ounces'),
+    lengthHundredths: integer('length_hundredths'),
+    widthHundredths: integer('width_hundredths'),
+    heightHundredths: integer('height_hundredths'),
+    shippingCents: integer('shipping_cents'),
+    status: text('status')
+      .$type<'unpacked' | 'packed'>()
+      .notNull()
+      .default('unpacked'),
+    shippoShipmentId: text('shippo_shipment_id'),
+    shippoRateId: text('shippo_rate_id'),
+    shippoProvider: text('shippo_provider'),
+    shippoService: text('shippo_service'),
+    shippoRateCents: integer('shippo_rate_cents'),
+    shippoQuotedAt: timestamp('shippo_quoted_at', { withTimezone: true }),
+    shippoTransactionId: text('shippo_transaction_id'),
+    shippoLabelUrl: text('shippo_label_url'),
+    shippoTrackingNumber: text('shippo_tracking_number'),
+    shippoTrackingUrl: text('shippo_tracking_url'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex('auction_package_buyer_number_unique').on(t.buyerId, t.packageNumber),
+    index('auction_package_buyer_status_idx').on(t.buyerId, t.status),
+  ],
+)
+
 export const auctionItem = pgTable(
   'auction_item',
   {
@@ -137,6 +173,7 @@ export const auctionItem = pgTable(
       .notNull()
       .references(() => auctionSession.id, { onDelete: 'cascade' }),
     buyerId: integer('buyer_id').references(() => auctionBuyer.id, { onDelete: 'set null' }),
+    packageId: integer('package_id').references(() => auctionPackage.id, { onDelete: 'set null' }),
     itemName: text('item_name').notNull(),
     priceCents: integer('price_cents').notNull(),
     saleType: text('sale_type').$type<'quick' | 'auction' | 'legacy'>().notNull().default('quick'),
@@ -158,4 +195,5 @@ export type AuctionSession = typeof auctionSession.$inferSelect
 export type AuctionBuyer = typeof auctionBuyer.$inferSelect
 export type AuctionCustomerProfile = typeof auctionCustomerProfile.$inferSelect
 export type AuctionCustomerPreference = typeof auctionCustomerPreference.$inferSelect
+export type AuctionPackage = typeof auctionPackage.$inferSelect
 export type AuctionItem = typeof auctionItem.$inferSelect

@@ -5,10 +5,12 @@ import {
   auctionCustomerPreference,
   auctionCustomerProfile,
   auctionItem,
+  auctionPackage,
   auctionSession,
   type AuctionBuyer,
   type AuctionCustomerProfile,
   type AuctionItem,
+  type AuctionPackage,
   type AuctionSession,
 } from '@/lib/auction-schema'
 
@@ -155,6 +157,40 @@ export async function ensureAuctionSchema() {
       `)
 
       await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS auction_package (
+          id serial PRIMARY KEY,
+          buyer_id integer NOT NULL REFERENCES auction_buyer(id) ON DELETE CASCADE,
+          package_number integer NOT NULL DEFAULT 1,
+          weight_ounces integer,
+          length_hundredths integer,
+          width_hundredths integer,
+          height_hundredths integer,
+          shipping_cents integer,
+          status text NOT NULL DEFAULT 'unpacked',
+          shippo_shipment_id text,
+          shippo_rate_id text,
+          shippo_provider text,
+          shippo_service text,
+          shippo_rate_cents integer,
+          shippo_quoted_at timestamptz,
+          shippo_transaction_id text,
+          shippo_label_url text,
+          shippo_tracking_number text,
+          shippo_tracking_url text,
+          created_at timestamptz NOT NULL DEFAULT now(),
+          updated_at timestamptz NOT NULL DEFAULT now()
+        )
+      `)
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS auction_package_buyer_number_unique
+        ON auction_package (buyer_id, package_number)
+      `)
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS auction_package_buyer_status_idx
+        ON auction_package (buyer_id, status)
+      `)
+
+      await db.execute(sql`
         CREATE TABLE IF NOT EXISTS auction_customer_profile (
           id serial PRIMARY KEY,
           user_id text NOT NULL,
@@ -202,6 +238,7 @@ export async function ensureAuctionSchema() {
           id serial PRIMARY KEY,
           auction_id integer NOT NULL REFERENCES auction_session(id) ON DELETE CASCADE,
           buyer_id integer REFERENCES auction_buyer(id) ON DELETE SET NULL,
+          package_id integer REFERENCES auction_package(id) ON DELETE SET NULL,
           item_name text NOT NULL,
           price_cents integer NOT NULL,
           sale_type text NOT NULL DEFAULT 'quick',
@@ -212,6 +249,10 @@ export async function ensureAuctionSchema() {
           voided_at timestamptz,
           created_at timestamptz NOT NULL DEFAULT now()
         )
+      `)
+      await db.execute(sql`
+        ALTER TABLE auction_item
+        ADD COLUMN IF NOT EXISTS package_id integer REFERENCES auction_package(id) ON DELETE SET NULL
       `)
       await db.execute(sql`
         ALTER TABLE auction_item
@@ -252,6 +293,7 @@ export async function ensureAuctionSchema() {
 
 export type AuctionBuyerView = AuctionBuyer & {
   shippingProfile: AuctionCustomerProfile | null
+  packages: AuctionPackage[]
   items: AuctionItem[]
   subtotalCents: number
   discountCents: number
@@ -316,6 +358,50 @@ export async function getAuctionState(userId: string, requestedId?: number | nul
   const auction = auctionRows[0]
   if (!auction) return null
 
+  await db.execute(sql`
+    INSERT INTO auction_package (
+      buyer_id,
+      package_number,
+      weight_ounces,
+      length_hundredths,
+      width_hundredths,
+      height_hundredths,
+      shipping_cents,
+      status
+    )
+    SELECT
+      b.id,
+      1,
+      b.package_weight_ounces,
+      b.package_length_hundredths,
+      b.package_width_hundredths,
+      b.package_height_hundredths,
+      b.shipping_cents,
+      b.package_status
+    FROM auction_buyer b
+    WHERE b.auction_id = ${auction.id}
+      AND NOT EXISTS (
+        SELECT 1 FROM auction_package p WHERE p.buyer_id = b.id
+      )
+    ON CONFLICT (buyer_id, package_number) DO NOTHING
+  `)
+
+  await db.execute(sql`
+    UPDATE auction_item i
+    SET package_id = p.id
+    FROM auction_package p
+    WHERE i.auction_id = ${auction.id}
+      AND i.buyer_id = p.buyer_id
+      AND p.package_number = 1
+      AND i.package_id IS NULL
+      AND NOT EXISTS (
+        SELECT 1
+        FROM auction_package p2
+        WHERE p2.buyer_id = p.buyer_id
+          AND p2.id <> p.id
+      )
+  `)
+
   const [buyers, allItems, buyerHistory, preferences, profiles] = await Promise.all([
     db
       .select()
@@ -349,6 +435,21 @@ export async function getAuctionState(userId: string, requestedId?: number | nul
       .where(eq(auctionCustomerProfile.userId, userId)),
   ])
 
+  const packageGroups = await Promise.all(
+    buyers.map(async (buyer) => ({
+      buyerId: buyer.id,
+      packages: await db
+        .select()
+        .from(auctionPackage)
+        .where(eq(auctionPackage.buyerId, buyer.id))
+        .orderBy(asc(auctionPackage.packageNumber)),
+    })),
+  )
+
+  const packagesByBuyerId = new Map(
+    packageGroups.map((group) => [group.buyerId, group.packages]),
+  )
+
   const buyerById = new Map(buyers.map((buyer) => [buyer.id, buyer]))
   const preferenceByName = new Map(
     preferences.map((preference) => [preference.normalizedName, preference.preferredPaymentMethod]),
@@ -359,6 +460,7 @@ export async function getAuctionState(userId: string, requestedId?: number | nul
   const buyerViews: AuctionBuyerView[] = buyers
     .map((buyer) => {
       const profile = profileByName.get(buyer.normalizedName) ?? null
+      const buyerPackages: AuctionPackage[] = packagesByBuyerId.get(buyer.id) ?? []
       const items = allItems.filter((item) => item.status === 'sold' && item.buyerId === buyer.id)
       const subtotalCents = items.reduce((sum, item) => sum + item.priceCents, 0)
       const discountCents = buyer.privateGroup ? Math.round(subtotalCents * 0.1) : 0
@@ -371,6 +473,7 @@ export async function getAuctionState(userId: string, requestedId?: number | nul
         ...buyer,
         email: buyer.email ?? profile?.email ?? null,
         shippingProfile: profile,
+        packages: buyerPackages,
         items,
         subtotalCents,
         discountCents,
