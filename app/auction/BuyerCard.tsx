@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import {
   createShopifyDraftOrderAction,
   getShopifyShippingRatesAction,
+  purchaseShopifyLabelAction,
+  refreshShopifyLabelAction,
   saveBuyerContactAction,
   sendShopifyInvoiceAction,
   saveBuyerShippingProfileAction,
@@ -153,6 +155,14 @@ export default function BuyerCard({
       currencyCode: string
     }>
   >([])
+  const [shopifyLabelUrl, setShopifyLabelUrl] = useState(buyer.shopifyLabelUrl ?? '')
+  const [shopifyTrackingNumber, setShopifyTrackingNumber] = useState(
+    buyer.shopifyTrackingNumber ?? '',
+  )
+  const [shopifyTrackingUrl, setShopifyTrackingUrl] = useState(
+    buyer.shopifyTrackingUrl ?? '',
+  )
+  const [shopifyCarrier, setShopifyCarrier] = useState(buyer.shopifyCarrier ?? '')
   const [pending, startTransition] = useTransition()
 
   function loadShopifyRates() {
@@ -227,6 +237,74 @@ export default function BuyerCard({
       textarea.remove()
     }
     setMessage(success)
+  }
+
+  function purchaseShopifyLabel() {
+    if (
+      !window.confirm(
+        'This will purchase a Shopify Shipping label and charge the store for the label. Continue?',
+      )
+    ) {
+      return
+    }
+
+    setMessage('')
+    startTransition(() => {
+      void (async () => {
+        try {
+          const result = await purchaseShopifyLabelAction({
+            auctionId,
+            buyerId: buyer.id,
+          })
+
+          if (result.labelUrl) {
+            setShopifyLabelUrl(result.labelUrl)
+            setShopifyTrackingNumber(result.trackingNumber ?? '')
+            setShopifyTrackingUrl(result.trackingUrl ?? '')
+            setShopifyCarrier(result.carrier ?? '')
+            setMessage(result.existing ? 'Existing Shopify label loaded.' : 'Shopify label purchased.')
+          } else {
+            setMessage(
+              result.status === 'PENDING_PURCHASE'
+                ? 'Shopify is still creating the label. Use Check label status in a moment.'
+                : 'Shopify label status: ' + result.status,
+            )
+          }
+
+          router.refresh()
+        } catch (error) {
+          setMessage(error instanceof Error ? error.message : 'Could not purchase Shopify label.')
+        }
+      })()
+    })
+  }
+
+  function refreshShopifyLabel() {
+    setMessage('')
+    startTransition(() => {
+      void (async () => {
+        try {
+          const result = await refreshShopifyLabelAction({
+            auctionId,
+            buyerId: buyer.id,
+          })
+
+          if (result.labelUrl) {
+            setShopifyLabelUrl(result.labelUrl)
+            setShopifyTrackingNumber(result.trackingNumber ?? '')
+            setShopifyTrackingUrl(result.trackingUrl ?? '')
+            setShopifyCarrier(result.carrier ?? '')
+            setMessage('Shopify label is ready.')
+          } else {
+            setMessage('Shopify label status: ' + result.status)
+          }
+
+          router.refresh()
+        } catch (error) {
+          setMessage(error instanceof Error ? error.message : 'Could not check Shopify label.')
+        }
+      })()
+    })
   }
 
   function syncShopifyOrder() {
@@ -835,6 +913,66 @@ export default function BuyerCard({
                     </strong>
                   </div>
                 ) : null}
+
+                {shopifyLabelUrl ? (
+                  <div className={styles.shopifyLabelPanel}>
+                    <div className={styles.paymentPanelTitle}>
+                      <span>Shipping label</span>
+                      <strong>READY</strong>
+                    </div>
+                    <div className={styles.shopifyOrderStatus}>
+                      <span>{shopifyCarrier || 'Shopify Shipping'}</span>
+                      <strong>{shopifyTrackingNumber || 'TRACKING READY'}</strong>
+                    </div>
+                    <div className={styles.invoiceActions}>
+                      <a
+                        className={styles.secondaryAction}
+                        href={shopifyLabelUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Open label
+                      </a>
+                      {shopifyTrackingUrl ? (
+                        <a
+                          className={styles.secondaryAction}
+                          href={shopifyTrackingUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          Track package
+                        </a>
+                      ) : null}
+                    </div>
+                  </div>
+                ) : buyer.shopifyLabelPurchaseResultId ? (
+                  <button
+                    className={styles.secondaryAction}
+                    type="button"
+                    onClick={refreshShopifyLabel}
+                    disabled={pending}
+                  >
+                    Check label status
+                  </button>
+                ) : (
+                  <button
+                    className={styles.primaryAction}
+                    type="button"
+                    onClick={purchaseShopifyLabel}
+                    disabled={
+                      pending ||
+                      !buyer.shopifyFulfillmentOrderId ||
+                      !buyer.paidAt ||
+                      buyer.paymentMethod !== 'shopify' ||
+                      !buyer.packageWeightOunces ||
+                      !buyer.packageLengthHundredths ||
+                      !buyer.packageWidthHundredths ||
+                      !buyer.packageHeightHundredths
+                    }
+                  >
+                    Buy Shopify shipping label
+                  </button>
+                )}
               </>
             ) : (
               <>
