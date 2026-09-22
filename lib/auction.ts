@@ -112,6 +112,36 @@ export async function ensureAuctionSchema() {
         ALTER TABLE auction_buyer ADD COLUMN IF NOT EXISTS shopify_draft_order_total_cents integer
       `)
       await db.execute(sql`
+        ALTER TABLE auction_buyer ADD COLUMN IF NOT EXISTS shopify_order_id text
+      `)
+      await db.execute(sql`
+        ALTER TABLE auction_buyer ADD COLUMN IF NOT EXISTS shopify_order_name text
+      `)
+      await db.execute(sql`
+        ALTER TABLE auction_buyer ADD COLUMN IF NOT EXISTS shopify_financial_status text
+      `)
+      await db.execute(sql`
+        ALTER TABLE auction_buyer ADD COLUMN IF NOT EXISTS shopify_fulfillment_order_id text
+      `)
+      await db.execute(sql`
+        ALTER TABLE auction_buyer ADD COLUMN IF NOT EXISTS shopify_label_purchase_result_id text
+      `)
+      await db.execute(sql`
+        ALTER TABLE auction_buyer ADD COLUMN IF NOT EXISTS shopify_label_url text
+      `)
+      await db.execute(sql`
+        ALTER TABLE auction_buyer ADD COLUMN IF NOT EXISTS shopify_tracking_number text
+      `)
+      await db.execute(sql`
+        ALTER TABLE auction_buyer ADD COLUMN IF NOT EXISTS shopify_tracking_url text
+      `)
+      await db.execute(sql`
+        ALTER TABLE auction_buyer ADD COLUMN IF NOT EXISTS shopify_carrier text
+      `)
+      await db.execute(sql`
+        ALTER TABLE auction_buyer ADD COLUMN IF NOT EXISTS shopify_label_purchased_at timestamptz
+      `)
+      await db.execute(sql`
         ALTER TABLE auction_buyer ADD COLUMN IF NOT EXISTS package_weight_ounces integer
       `)
       await db.execute(sql`
