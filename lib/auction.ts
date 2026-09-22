@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ne, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, inArray, ne, sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import {
   auctionBuyer,
@@ -432,7 +432,7 @@ export async function getAuctionState(userId: string, requestedId?: number | nul
       )
   `)
 
-  const [buyers, allItems, buyerHistory, preferences, profiles, packages] = await Promise.all([
+  const [buyers, allItems, buyerHistory, preferences, profiles] = await Promise.all([
     db
       .select()
       .from(auctionBuyer)
@@ -463,13 +463,15 @@ export async function getAuctionState(userId: string, requestedId?: number | nul
       .select()
       .from(auctionCustomerProfile)
       .where(eq(auctionCustomerProfile.userId, userId)),
-    db
-      .select({ package: auctionPackage })
-      .from(auctionPackage)
-      .innerJoin(auctionBuyer, eq(auctionPackage.buyerId, auctionBuyer.id))
-      .where(eq(auctionBuyer.auctionId, auction.id))
-      .orderBy(asc(auctionPackage.packageNumber)),
   ])
+
+  const packages = buyers.length
+    ? await db
+        .select()
+        .from(auctionPackage)
+        .where(inArray(auctionPackage.buyerId, buyers.map((buyer) => buyer.id)))
+        .orderBy(asc(auctionPackage.packageNumber))
+    : []
 
   const buyerById = new Map(buyers.map((buyer) => [buyer.id, buyer]))
   const preferenceByName = new Map(
@@ -482,7 +484,6 @@ export async function getAuctionState(userId: string, requestedId?: number | nul
     .map((buyer) => {
       const profile = profileByName.get(buyer.normalizedName) ?? null
       const buyerPackages = packages
-        .map((row) => row.package)
         .filter((pkg) => pkg.buyerId === buyer.id)
         .sort((a, b) => a.packageNumber - b.packageNumber)
       const items = allItems.filter((item) => item.status === 'sold' && item.buyerId === buyer.id)
