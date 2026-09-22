@@ -525,6 +525,158 @@ export async function setBuyerShippingAction(input: {
   return { ok: true }
 }
 
+type ShopifyShippingRatesResponse = {
+  draftOrderAvailableDeliveryOptions: {
+    availableShippingRates: Array<{
+      handle: string
+      title: string
+      code: string
+      source: string
+      price: {
+        amount: string
+        currencyCode: string
+      }
+    }>
+  }
+}
+
+const SHOPIFY_SHIPPING_RATES = `
+  query AuctionShippingRates($input: DraftOrderAvailableDeliveryOptionsInput!) {
+    draftOrderAvailableDeliveryOptions(input: $input) {
+      availableShippingRates {
+        handle
+        title
+        code
+        source
+        price {
+          amount
+          currencyCode
+        }
+      }
+    }
+  }
+`
+
+export async function getShopifyShippingRatesAction(input: {
+  auctionId: number
+  buyerId: number
+  weightPounds: string
+  weightOunces: string
+  address1: string
+  address2: string
+  city: string
+  state: string
+  postalCode: string
+  countryCode?: string
+}) {
+  const userId = await currentUserId()
+  await requireAuction(userId, input.auctionId)
+
+  const [buyer] = await db
+    .select()
+    .from(auctionBuyer)
+    .where(and(eq(auctionBuyer.id, input.buyerId), eq(auctionBuyer.auctionId, input.auctionId)))
+    .limit(1)
+
+  if (!buyer) throw new Error('Buyer not found')
+
+  const address1 = input.address1.trim()
+  const address2 = input.address2.trim()
+  const city = input.city.trim()
+  const state = input.state.trim().toUpperCase()
+  const postalCode = input.postalCode.trim()
+  const countryCode = (input.countryCode ?? 'US').trim().toUpperCase() || 'US'
+
+  if (!address1 || !city || !state || !postalCode) {
+    throw new Error('Enter the customer address, city, state, and ZIP first.')
+  }
+
+  const weightPounds = parseWholeNumber(input.weightPounds, 'Weight pounds')
+  const weightOunces = parseWholeNumber(input.weightOunces, 'Weight ounces')
+  if (weightOunces !== null && weightOunces > 15) {
+    throw new Error('Weight ounces must be between 0 and 15')
+  }
+
+  const totalWeightOunces = (weightPounds ?? 0) * 16 + (weightOunces ?? 0)
+  if (totalWeightOunces <= 0) {
+    throw new Error('Enter the package weight before getting shipping rates.')
+  }
+
+  const soldItems = await db
+    .select({ priceCents: auctionItem.priceCents })
+    .from(auctionItem)
+    .where(
+      and(
+        eq(auctionItem.auctionId, input.auctionId),
+        eq(auctionItem.buyerId, input.buyerId),
+        eq(auctionItem.status, 'sold'),
+      ),
+    )
+
+  if (!soldItems.length) throw new Error('This buyer has no sold items.')
+
+  const subtotalCents = soldItems.reduce((sum, item) => sum + item.priceCents, 0)
+  const merchandiseCents = buyer.privateGroup
+    ? subtotalCents - Math.round(subtotalCents * 0.1)
+    : subtotalCents
+  const { firstName, lastName } = splitCustomerName(buyer.displayName)
+
+  const data = await shopifyGraphql<ShopifyShippingRatesResponse>(
+    SHOPIFY_SHIPPING_RATES,
+    {
+      input: {
+        lineItems: [
+          {
+            title: 'Auction package',
+            quantity: 1,
+            originalUnitPriceWithCurrency: {
+              amount: (merchandiseCents / 100).toFixed(2),
+              currencyCode: 'USD',
+            },
+            requiresShipping: true,
+            taxable: false,
+            weight: {
+              value: totalWeightOunces,
+              unit: 'OUNCES',
+            },
+          },
+        ],
+        shippingAddress: {
+          firstName,
+          lastName,
+          address1,
+          address2: address2 || undefined,
+          city,
+          provinceCode: state,
+          zip: postalCode,
+          countryCode,
+        },
+      },
+    },
+  )
+
+  const rates = data.draftOrderAvailableDeliveryOptions.availableShippingRates
+    .map((rate) => {
+      const amount = Number(rate.price.amount)
+      return {
+        handle: rate.handle,
+        title: rate.title,
+        code: rate.code,
+        source: rate.source,
+        amountCents: Number.isFinite(amount) ? Math.round(amount * 100) : null,
+        currencyCode: rate.price.currencyCode,
+      }
+    })
+    .filter((rate) => rate.amountCents !== null)
+    .sort((a, b) => (a.amountCents ?? 0) - (b.amountCents ?? 0))
+
+  if (!rates.length) {
+    throw new Error('Shopify did not return a shipping rate for this package and address.')
+  }
+
+  return { ok: true, rates }
+}
+
 type ShopifyDraftOrderCreateResponse = {
   draftOrderCreate: {
     draftOrder: {
@@ -751,6 +903,443 @@ export async function createShopifyDraftOrderAction(input: {
     draftOrderName: result.draftOrder.name,
     totalCents,
     existing: false,
+  }
+}
+
+type ShopifyDraftOrderStatusResponse = {
+  node:
+    | {
+        id: string
+        status: string
+        order: {
+          id: string
+          name: string
+          fullyPaid: boolean
+          displayFinancialStatus: string | null
+          fulfillmentOrders: {
+            nodes: Array<{
+              id: string
+              status: string
+            }>
+          }
+        } | null
+      }
+    | null
+}
+
+const SHOPIFY_DRAFT_ORDER_STATUS = `
+  query AuctionDraftOrderStatus($id: ID!) {
+    node(id: $id) {
+      ... on DraftOrder {
+        id
+        status
+        order {
+          id
+          name
+          fullyPaid
+          displayFinancialStatus
+          fulfillmentOrders(first: 10) {
+            nodes {
+              id
+              status
+            }
+          }
+        }
+      }
+    }
+  }
+`
+
+export async function syncShopifyOrderAction(input: {
+  auctionId: number
+  buyerId: number
+}) {
+  const userId = await currentUserId()
+  await requireAuction(userId, input.auctionId)
+
+  const [buyer] = await db
+    .select()
+    .from(auctionBuyer)
+    .where(and(eq(auctionBuyer.id, input.buyerId), eq(auctionBuyer.auctionId, input.auctionId)))
+    .limit(1)
+
+  if (!buyer) throw new Error('Buyer not found')
+  if (!buyer.shopifyDraftOrderId) {
+    throw new Error('Create the Shopify checkout link first.')
+  }
+
+  const data = await shopifyGraphql<ShopifyDraftOrderStatusResponse>(
+    SHOPIFY_DRAFT_ORDER_STATUS,
+    { id: buyer.shopifyDraftOrderId },
+  )
+
+  if (!data.node) {
+    throw new Error('Shopify could not find this draft order.')
+  }
+
+  const order = data.node.order
+  if (!order) {
+    return {
+      ok: true,
+      paid: false,
+      draftStatus: data.node.status,
+      message: 'Shopify checkout has not been completed yet.',
+    }
+  }
+
+  const fulfillmentOrder =
+    order.fulfillmentOrders.nodes.find((node) =>
+      ['OPEN', 'IN_PROGRESS', 'SCHEDULED'].includes(node.status),
+    ) ?? order.fulfillmentOrders.nodes[0] ?? null
+
+  const now = new Date()
+  const paidCents =
+    order.fullyPaid && buyer.shopifyDraftOrderTotalCents !== null
+      ? buyer.shopifyDraftOrderTotalCents
+      : buyer.paidCents
+
+  await db
+    .update(auctionBuyer)
+    .set({
+      shopifyOrderId: order.id,
+      shopifyOrderName: order.name,
+      shopifyFinancialStatus: order.displayFinancialStatus,
+      shopifyFulfillmentOrderId: fulfillmentOrder?.id ?? null,
+      invoiceStatus: order.fullyPaid ? 'paid' : buyer.invoiceStatus,
+      paymentMethod: order.fullyPaid ? 'shopify' : buyer.paymentMethod,
+      paymentTransactionId: order.fullyPaid ? order.id : buyer.paymentTransactionId,
+      paidCents,
+      paidAt: order.fullyPaid ? buyer.paidAt ?? now : buyer.paidAt,
+      updatedAt: now,
+    })
+    .where(eq(auctionBuyer.id, buyer.id))
+
+  revalidatePath('/auction')
+
+  return {
+    ok: true,
+    paid: order.fullyPaid,
+    draftStatus: data.node.status,
+    financialStatus: order.displayFinancialStatus,
+    orderId: order.id,
+    orderName: order.name,
+    fulfillmentOrderId: fulfillmentOrder?.id ?? null,
+    message: order.fullyPaid
+      ? 'Shopify payment confirmed.'
+      : 'Shopify order exists but is not fully paid yet.',
+  }
+}
+
+type ShopifyShippingLabelPurchaseResponse = {
+  shippingLabelPurchase: {
+    shippingLabelPurchaseResult: {
+      id: string
+      status: string
+    } | null
+    userErrors: Array<{
+      field: string[] | null
+      code: string | null
+      message: string
+    }>
+  }
+}
+
+type ShopifyShippingLabelResultResponse = {
+  node:
+    | {
+        status: string
+        errors: Array<{
+          code: string | null
+          message: string
+        }>
+        shippingLabels: Array<{
+          id: string
+          cancellable: boolean
+          printed: boolean
+          trackingInfo: {
+            number: string | null
+            company: string | null
+            url: string | null
+          } | null
+          shippingDocuments: Array<{
+            documentType: string
+            format: string
+            url: string
+          }>
+        }>
+      }
+    | null
+}
+
+const SHOPIFY_SHIPPING_LABEL_PURCHASE = `
+  mutation AuctionShippingLabelPurchase($input: ShippingLabelPurchaseInput!) {
+    shippingLabelPurchase(shippingLabelPurchase: $input) {
+      shippingLabelPurchaseResult {
+        id
+        status
+      }
+      userErrors {
+        field
+        code
+        message
+      }
+    }
+  }
+`
+
+const SHOPIFY_SHIPPING_LABEL_RESULT = `
+  query AuctionShippingLabelResult($id: ID!) {
+    node(id: $id) {
+      ... on ShippingLabelPurchaseResult {
+        status
+        errors {
+          code
+          message
+        }
+        shippingLabels {
+          id
+          cancellable
+          printed
+          trackingInfo {
+            number
+            company
+            url
+          }
+          shippingDocuments {
+            documentType
+            format
+            url
+          }
+        }
+      }
+    }
+  }
+`
+
+async function readShopifyLabelResult(resultId: string) {
+  const data = await shopifyGraphql<ShopifyShippingLabelResultResponse>(
+    SHOPIFY_SHIPPING_LABEL_RESULT,
+    { id: resultId },
+  )
+
+  if (!data.node) {
+    throw new Error('Shopify could not find the shipping label purchase.')
+  }
+
+  if (data.node.status === 'PURCHASE_FAILED') {
+    const detail = data.node.errors.map((error) => error.message).filter(Boolean).join('; ')
+    throw new Error(detail || 'Shopify could not purchase the shipping label.')
+  }
+
+  const label = data.node.shippingLabels[0] ?? null
+  const document =
+    label?.shippingDocuments.find((item) => item.documentType === 'LABEL') ??
+    label?.shippingDocuments[0] ??
+    null
+
+  return {
+    status: data.node.status,
+    label,
+    document,
+  }
+}
+
+export async function purchaseShopifyLabelAction(input: {
+  auctionId: number
+  buyerId: number
+}) {
+  const userId = await currentUserId()
+  await requireAuction(userId, input.auctionId)
+
+  const [buyer] = await db
+    .select()
+    .from(auctionBuyer)
+    .where(and(eq(auctionBuyer.id, input.buyerId), eq(auctionBuyer.auctionId, input.auctionId)))
+    .limit(1)
+
+  if (!buyer) throw new Error('Buyer not found')
+
+  if (buyer.shopifyLabelUrl) {
+    return {
+      ok: true,
+      status: 'PURCHASED',
+      labelUrl: buyer.shopifyLabelUrl,
+      trackingNumber: buyer.shopifyTrackingNumber,
+      trackingUrl: buyer.shopifyTrackingUrl,
+      carrier: buyer.shopifyCarrier,
+      existing: true,
+    }
+  }
+
+  if (!buyer.shopifyOrderId || !buyer.shopifyFulfillmentOrderId) {
+    throw new Error('Check Shopify payment first so the fulfillment order is available.')
+  }
+
+  if (!buyer.paidAt || buyer.paymentMethod !== 'shopify') {
+    throw new Error('Shopify payment must be confirmed before buying the label.')
+  }
+
+  if (
+    !buyer.packageWeightOunces ||
+    !buyer.packageLengthHundredths ||
+    !buyer.packageWidthHundredths ||
+    !buyer.packageHeightHundredths
+  ) {
+    throw new Error('Save the package weight and all three dimensions first.')
+  }
+
+  let resultId = buyer.shopifyLabelPurchaseResultId
+
+  if (!resultId) {
+    const purchase = await shopifyGraphql<ShopifyShippingLabelPurchaseResponse>(
+      SHOPIFY_SHIPPING_LABEL_PURCHASE,
+      {
+        input: {
+          fulfillmentOrderId: buyer.shopifyFulfillmentOrderId,
+          shippingDatetime: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+          totalWeight: {
+            value: buyer.packageWeightOunces,
+            unit: 'OUNCES',
+          },
+          packageInfo: {
+            customPackage: {
+              weight: {
+                value: 0.1,
+                unit: 'OUNCES',
+              },
+              dimensions: {
+                length: buyer.packageLengthHundredths / 100,
+                width: buyer.packageWidthHundredths / 100,
+                height: buyer.packageHeightHundredths / 100,
+                unit: 'INCHES',
+              },
+              type: 'BOX',
+            },
+          },
+          notifyCustomer: false,
+        },
+      },
+    )
+
+    const result = purchase.shippingLabelPurchase
+    if (result.userErrors.length) {
+      throw new Error(result.userErrors.map((error) => error.message).join('; '))
+    }
+
+    if (!result.shippingLabelPurchaseResult?.id) {
+      throw new Error('Shopify did not start the shipping label purchase.')
+    }
+
+    resultId = result.shippingLabelPurchaseResult.id
+
+    await db
+      .update(auctionBuyer)
+      .set({
+        shopifyLabelPurchaseResultId: resultId,
+        updatedAt: new Date(),
+      })
+      .where(eq(auctionBuyer.id, buyer.id))
+  }
+
+  let checked = await readShopifyLabelResult(resultId)
+
+  for (let attempt = 0; attempt < 12 && checked.status === 'PENDING_PURCHASE'; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+    checked = await readShopifyLabelResult(resultId)
+  }
+
+  if (checked.status !== 'PURCHASED' || !checked.label || !checked.document?.url) {
+    revalidatePath('/auction')
+    return {
+      ok: true,
+      status: checked.status,
+      labelUrl: null,
+      trackingNumber: null,
+      trackingUrl: null,
+      carrier: null,
+      existing: false,
+    }
+  }
+
+  const now = new Date()
+  await db
+    .update(auctionBuyer)
+    .set({
+      shopifyLabelUrl: checked.document.url,
+      shopifyTrackingNumber: checked.label.trackingInfo?.number ?? null,
+      shopifyTrackingUrl: checked.label.trackingInfo?.url ?? null,
+      shopifyCarrier: checked.label.trackingInfo?.company ?? null,
+      shopifyLabelPurchasedAt: now,
+      updatedAt: now,
+    })
+    .where(eq(auctionBuyer.id, buyer.id))
+
+  revalidatePath('/auction')
+
+  return {
+    ok: true,
+    status: 'PURCHASED',
+    labelUrl: checked.document.url,
+    trackingNumber: checked.label.trackingInfo?.number ?? null,
+    trackingUrl: checked.label.trackingInfo?.url ?? null,
+    carrier: checked.label.trackingInfo?.company ?? null,
+    existing: false,
+  }
+}
+
+export async function refreshShopifyLabelAction(input: {
+  auctionId: number
+  buyerId: number
+}) {
+  const userId = await currentUserId()
+  await requireAuction(userId, input.auctionId)
+
+  const [buyer] = await db
+    .select()
+    .from(auctionBuyer)
+    .where(and(eq(auctionBuyer.id, input.buyerId), eq(auctionBuyer.auctionId, input.auctionId)))
+    .limit(1)
+
+  if (!buyer) throw new Error('Buyer not found')
+  if (!buyer.shopifyLabelPurchaseResultId) {
+    throw new Error('No Shopify label purchase has been started.')
+  }
+
+  const checked = await readShopifyLabelResult(buyer.shopifyLabelPurchaseResultId)
+
+  if (checked.status !== 'PURCHASED' || !checked.label || !checked.document?.url) {
+    return {
+      ok: true,
+      status: checked.status,
+      labelUrl: null,
+      trackingNumber: null,
+      trackingUrl: null,
+      carrier: null,
+    }
+  }
+
+  const now = new Date()
+  await db
+    .update(auctionBuyer)
+    .set({
+      shopifyLabelUrl: checked.document.url,
+      shopifyTrackingNumber: checked.label.trackingInfo?.number ?? null,
+      shopifyTrackingUrl: checked.label.trackingInfo?.url ?? null,
+      shopifyCarrier: checked.label.trackingInfo?.company ?? null,
+      shopifyLabelPurchasedAt: buyer.shopifyLabelPurchasedAt ?? now,
+      updatedAt: now,
+    })
+    .where(eq(auctionBuyer.id, buyer.id))
+
+  revalidatePath('/auction')
+
+  return {
+    ok: true,
+    status: 'PURCHASED',
+    labelUrl: checked.document.url,
+    trackingNumber: checked.label.trackingInfo?.number ?? null,
+    trackingUrl: checked.label.trackingInfo?.url ?? null,
+    carrier: checked.label.trackingInfo?.company ?? null,
   }
 }
 
