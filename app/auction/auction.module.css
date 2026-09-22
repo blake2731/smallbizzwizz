@@ -1450,3 +1450,38 @@
     min-height: 48px;
   }
 }
+
+
+.packHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.printPackingLink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  border: 1px solid #6571ff;
+  border-radius: 999px;
+  background: rgba(101, 113, 255, 0.13);
+  padding: 0 13px;
+  color: #c7ceff;
+  text-decoration: none;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+@media (max-width: 760px) {
+  .packHeaderActions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .printPackingLink {
+    min-height: 44px;
+  }
+}
