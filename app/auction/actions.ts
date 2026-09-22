@@ -3,6 +3,7 @@
 import { auth } from '@clerk/nextjs/server'
 import { and, desc, eq, ne } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
+import { redirect } from 'next/navigation'
 import { db } from '@/lib/db'
 import { auctionBuyer, auctionItem, auctionSession } from '@/lib/auction-schema'
 import {
@@ -129,7 +130,7 @@ export async function createAuctionAction(formData: FormData) {
     .returning({ id: auctionSession.id })
 
   revalidatePath('/auction')
-  return created.id
+  redirect('/auction?auction=' + created.id + '&view=live')
 }
 
 export async function recordSaleAction(input: LiveItemInput) {
