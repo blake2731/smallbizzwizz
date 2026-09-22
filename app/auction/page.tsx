@@ -8,6 +8,7 @@ import {
 } from './actions'
 import LiveEntry from './LiveEntry'
 import BuyerCard from './BuyerCard'
+import ActivityItem from './ActivityItem'
 import { getAuctionList, getAuctionState, money } from '@/lib/auction'
 import styles from './auction.module.css'
 
@@ -119,8 +120,7 @@ export default async function AuctionPage({
     )
   }
 
-  const { auction, buyers, recentBuyers, items, metrics } = state
-  const recentItems = items.slice(0, 12)
+  const { auction, buyers, recentBuyers, items, openLot, metrics } = state
   const packBuyers = [...buyers].sort((a, b) => {
     if (a.packageStatus !== b.packageStatus) return a.packageStatus === 'packed' ? 1 : -1
     return a.displayName.localeCompare(b.displayName)
@@ -223,6 +223,12 @@ export default async function AuctionPage({
                   id: buyer.id,
                   displayName: buyer.displayName,
                 }))}
+                openLot={openLot ? {
+                  id: openLot.id,
+                  itemName: openLot.itemName,
+                  priceCents: openLot.priceCents,
+                  buyerName: openLot.buyerName,
+                } : null}
               />
 
               <details className={styles.importPanel}>
@@ -247,24 +253,21 @@ export default async function AuctionPage({
             <aside className={styles.activityPanel}>
               <div className={styles.sectionHeader}>
                 <div>
-                  <p className={styles.kicker}>Immediate verification</p>
-                  <h2>Recent activity</h2>
+                  <p className={styles.kicker}>Edit anything</p>
+                  <h2>Activity & corrections</h2>
                 </div>
               </div>
 
-              {recentItems.length ? (
+              {items.length ? (
                 <div className={styles.activityList}>
-                  {recentItems.map((item) => (
-                    <div className={styles.activityRow} key={item.id}>
-                      <div className={item.status === 'sold' ? styles.soldDot : styles.unsoldDot} />
-                      <div className={styles.activityMain}>
-                        <strong>{item.itemName}</strong>
-                        <span>
-                          {item.status === 'sold' ? item.buyerName : 'Unsold'} · {formatTime(item.createdAt)}
-                        </span>
-                      </div>
-                      <div className={styles.activityPrice}>{money(item.priceCents)}</div>
-                    </div>
+                  {items.map((item) => (
+                    <ActivityItem
+                      key={item.id}
+                      auctionId={auction.id}
+                      item={item}
+                      buyers={recentBuyers}
+                      timeLabel={formatTime(item.createdAt)}
+                    />
                   ))}
                 </div>
               ) : (
