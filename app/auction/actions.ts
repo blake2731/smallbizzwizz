@@ -567,6 +567,34 @@ const SHOPIFY_DRAFT_ORDER_CREATE = `
   }
 `
 
+type ShopifyDraftOrderInvoiceSendResponse = {
+  draftOrderInvoiceSend: {
+    draftOrder: {
+      id: string
+      invoiceSentAt: string | null
+    } | null
+    userErrors: Array<{
+      field: string[] | null
+      message: string
+    }>
+  }
+}
+
+const SHOPIFY_DRAFT_ORDER_INVOICE_SEND = `
+  mutation AuctionDraftOrderInvoiceSend($id: ID!, $email: EmailInput) {
+    draftOrderInvoiceSend(id: $id, email: $email) {
+      draftOrder {
+        id
+        invoiceSentAt
+      }
+      userErrors {
+        field
+        message
+      }
+    }
+  }
+`
+
 function splitCustomerName(displayName: string) {
   const parts = displayName.trim().split(/\s+/).filter(Boolean)
   if (parts.length <= 1) {
@@ -724,6 +752,73 @@ export async function createShopifyDraftOrderAction(input: {
     totalCents,
     existing: false,
   }
+}
+
+export async function sendShopifyInvoiceAction(input: {
+  auctionId: number
+  buyerId: number
+}) {
+  const userId = await currentUserId()
+  await requireAuction(userId, input.auctionId)
+
+  const [buyer] = await db
+    .select()
+    .from(auctionBuyer)
+    .where(and(eq(auctionBuyer.id, input.buyerId), eq(auctionBuyer.auctionId, input.auctionId)))
+    .limit(1)
+
+  if (!buyer) throw new Error('Buyer not found')
+  if (!buyer.shopifyDraftOrderId) {
+    throw new Error('Create the Shopify checkout link before sending the invoice.')
+  }
+
+  const [profile] = await db
+    .select()
+    .from(auctionCustomerProfile)
+    .where(
+      and(
+        eq(auctionCustomerProfile.userId, userId),
+        eq(auctionCustomerProfile.normalizedName, buyer.normalizedName),
+      ),
+    )
+    .limit(1)
+
+  const email = (buyer.email || profile?.email || '').trim().toLowerCase()
+  if (!email) {
+    throw new Error('Save the customer email before sending a Shopify invoice.')
+  }
+
+  const data = await shopifyGraphql<ShopifyDraftOrderInvoiceSendResponse>(
+    SHOPIFY_DRAFT_ORDER_INVOICE_SEND,
+    {
+      id: buyer.shopifyDraftOrderId,
+      email: {
+        to: email,
+        customMessage: 'Thank you for shopping with The Crafty Brother. You can review and pay your auction invoice securely through Shopify.',
+      },
+    },
+  )
+
+  const result = data.draftOrderInvoiceSend
+  if (result.userErrors.length) {
+    throw new Error(result.userErrors.map((error) => error.message).join('; '))
+  }
+
+  const now = new Date()
+  await db
+    .update(auctionBuyer)
+    .set({
+      invoiceStatus: 'sent',
+      invoiceMethod: 'shopify',
+      invoiceSentAt: result.draftOrder?.invoiceSentAt
+        ? new Date(result.draftOrder.invoiceSentAt)
+        : now,
+      updatedAt: now,
+    })
+    .where(eq(auctionBuyer.id, buyer.id))
+
+  revalidatePath('/auction')
+  return { ok: true, email }
 }
 
 export async function setBuyerInvoiceStatusAction(input: {
