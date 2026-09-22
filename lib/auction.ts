@@ -3,9 +3,11 @@ import { db } from '@/lib/db'
 import {
   auctionBuyer,
   auctionCustomerPreference,
+  auctionCustomerProfile,
   auctionItem,
   auctionSession,
   type AuctionBuyer,
+  type AuctionCustomerProfile,
   type AuctionItem,
   type AuctionSession,
 } from '@/lib/auction-schema'
@@ -100,6 +102,45 @@ export async function ensureAuctionSchema() {
       await db.execute(sql`
         ALTER TABLE auction_buyer ADD COLUMN IF NOT EXISTS paid_cents integer
       `)
+      await db.execute(sql`
+        ALTER TABLE auction_buyer ADD COLUMN IF NOT EXISTS package_weight_ounces integer
+      `)
+      await db.execute(sql`
+        ALTER TABLE auction_buyer ADD COLUMN IF NOT EXISTS package_length_hundredths integer
+      `)
+      await db.execute(sql`
+        ALTER TABLE auction_buyer ADD COLUMN IF NOT EXISTS package_width_hundredths integer
+      `)
+      await db.execute(sql`
+        ALTER TABLE auction_buyer ADD COLUMN IF NOT EXISTS package_height_hundredths integer
+      `)
+
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS auction_customer_profile (
+          id serial PRIMARY KEY,
+          user_id text NOT NULL,
+          normalized_name text NOT NULL,
+          display_name text NOT NULL,
+          email text,
+          phone text,
+          address_1 text,
+          address_2 text,
+          city text,
+          state text,
+          postal_code text,
+          country_code text NOT NULL DEFAULT 'US',
+          shopify_customer_id text,
+          updated_at timestamptz NOT NULL DEFAULT now()
+        )
+      `)
+      await db.execute(sql`
+        CREATE UNIQUE INDEX IF NOT EXISTS auction_customer_profile_user_name_unique
+        ON auction_customer_profile (user_id, normalized_name)
+      `)
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS auction_customer_profile_user_updated_idx
+        ON auction_customer_profile (user_id, updated_at)
+      `)
 
       await db.execute(sql`
         CREATE TABLE IF NOT EXISTS auction_customer_preference (
@@ -171,6 +212,7 @@ export async function ensureAuctionSchema() {
 }
 
 export type AuctionBuyerView = AuctionBuyer & {
+  shippingProfile: AuctionCustomerProfile | null
   items: AuctionItem[]
   subtotalCents: number
   discountCents: number
@@ -235,7 +277,7 @@ export async function getAuctionState(userId: string, requestedId?: number | nul
   const auction = auctionRows[0]
   if (!auction) return null
 
-  const [buyers, allItems, buyerHistory, preferences] = await Promise.all([
+  const [buyers, allItems, buyerHistory, preferences, profiles] = await Promise.all([
     db
       .select()
       .from(auctionBuyer)
@@ -262,14 +304,22 @@ export async function getAuctionState(userId: string, requestedId?: number | nul
       .select()
       .from(auctionCustomerPreference)
       .where(eq(auctionCustomerPreference.userId, userId)),
+    db
+      .select()
+      .from(auctionCustomerProfile)
+      .where(eq(auctionCustomerProfile.userId, userId)),
   ])
 
   const buyerById = new Map(buyers.map((buyer) => [buyer.id, buyer]))
   const preferenceByName = new Map(
     preferences.map((preference) => [preference.normalizedName, preference.preferredPaymentMethod]),
   )
+  const profileByName = new Map(
+    profiles.map((profile) => [profile.normalizedName, profile]),
+  )
   const buyerViews: AuctionBuyerView[] = buyers
     .map((buyer) => {
+      const profile = profileByName.get(buyer.normalizedName) ?? null
       const items = allItems.filter((item) => item.status === 'sold' && item.buyerId === buyer.id)
       const subtotalCents = items.reduce((sum, item) => sum + item.priceCents, 0)
       const discountCents = buyer.privateGroup ? Math.round(subtotalCents * 0.1) : 0
@@ -280,6 +330,8 @@ export async function getAuctionState(userId: string, requestedId?: number | nul
 
       return {
         ...buyer,
+        email: buyer.email ?? profile?.email ?? null,
+        shippingProfile: profile,
         items,
         subtotalCents,
         discountCents,

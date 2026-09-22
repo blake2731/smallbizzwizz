@@ -5,7 +5,13 @@ import { and, desc, eq, ne } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { db } from '@/lib/db'
-import { auctionBuyer, auctionCustomerPreference, auctionItem, auctionSession } from '@/lib/auction-schema'
+import {
+  auctionBuyer,
+  auctionCustomerPreference,
+  auctionCustomerProfile,
+  auctionItem,
+  auctionSession,
+} from '@/lib/auction-schema'
 import {
   displayBuyerName,
   ensureAuctionSchema,
@@ -423,17 +429,68 @@ export async function setBuyerPrivateGroupAction(input: {
   return { ok: true }
 }
 
+function parseWholeNumber(value: string, label: string) {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  if (!/^\d+$/.test(trimmed)) throw new Error(label + ' must be a whole number')
+  const number = Number(trimmed)
+  if (!Number.isSafeInteger(number) || number < 0) throw new Error('Enter valid ' + label.toLowerCase())
+  return number
+}
+
+function parseDimensionHundredths(value: string, label: string) {
+  const trimmed = value.trim()
+  if (!trimmed) return null
+  const number = Number(trimmed)
+  if (!Number.isFinite(number) || number <= 0 || number > 999) {
+    throw new Error('Enter valid ' + label.toLowerCase())
+  }
+  return Math.round(number * 100)
+}
+
 export async function setBuyerShippingAction(input: {
   auctionId: number
   buyerId: number
   shipping: string
   packed: boolean
+  weightPounds: string
+  weightOunces: string
+  length: string
+  width: string
+  height: string
 }) {
   const userId = await currentUserId()
   await requireAuction(userId, input.auctionId)
 
   const shippingCents = input.shipping.trim() ? parseMoneyToCents(input.shipping) : null
   if (input.shipping.trim() && shippingCents === null) throw new Error('Enter valid shipping')
+
+  const weightPounds = parseWholeNumber(input.weightPounds, 'Weight pounds')
+  const weightOunces = parseWholeNumber(input.weightOunces, 'Weight ounces')
+  if (weightOunces !== null && weightOunces > 15) {
+    throw new Error('Weight ounces must be between 0 and 15')
+  }
+
+  const packageWeightOunces =
+    weightPounds === null && weightOunces === null
+      ? null
+      : (weightPounds ?? 0) * 16 + (weightOunces ?? 0)
+  const packageLengthHundredths = parseDimensionHundredths(input.length, 'Length')
+  const packageWidthHundredths = parseDimensionHundredths(input.width, 'Width')
+  const packageHeightHundredths = parseDimensionHundredths(input.height, 'Height')
+
+  if (input.packed) {
+    if (!packageWeightOunces || packageWeightOunces <= 0) {
+      throw new Error('Enter the package weight before marking it packed')
+    }
+    if (
+      packageLengthHundredths === null ||
+      packageWidthHundredths === null ||
+      packageHeightHundredths === null
+    ) {
+      throw new Error('Enter all three package dimensions before marking it packed')
+    }
+  }
 
   const [buyer] = await db
     .select()
@@ -453,6 +510,10 @@ export async function setBuyerShippingAction(input: {
     .update(auctionBuyer)
     .set({
       shippingCents,
+      packageWeightOunces,
+      packageLengthHundredths,
+      packageWidthHundredths,
+      packageHeightHundredths,
       packageStatus: input.packed ? 'packed' : 'unpacked',
       invoiceStatus: nextInvoiceStatus,
       updatedAt: new Date(),
@@ -645,6 +706,89 @@ export async function setBuyerPaymentPreferenceAction(input: {
   return { ok: true }
 }
 
+export async function saveBuyerShippingProfileAction(input: {
+  auctionId: number
+  buyerId: number
+  email: string
+  phone: string
+  address1: string
+  address2: string
+  city: string
+  state: string
+  postalCode: string
+  countryCode?: string
+}) {
+  const userId = await currentUserId()
+  await requireAuction(userId, input.auctionId)
+
+  const [buyer] = await db
+    .select()
+    .from(auctionBuyer)
+    .where(and(eq(auctionBuyer.id, input.buyerId), eq(auctionBuyer.auctionId, input.auctionId)))
+    .limit(1)
+  if (!buyer) throw new Error('Buyer not found')
+
+  const email = input.email.trim().toLowerCase()
+  const phone = input.phone.trim()
+  const address1 = input.address1.trim()
+  const address2 = input.address2.trim()
+  const city = input.city.trim()
+  const state = input.state.trim().toUpperCase()
+  const postalCode = input.postalCode.trim()
+  const countryCode = (input.countryCode ?? 'US').trim().toUpperCase() || 'US'
+
+  const hasAddress = Boolean(address1 || address2 || city || state || postalCode)
+  if (hasAddress && (!address1 || !city || !state || !postalCode)) {
+    throw new Error('Address, city, state, and ZIP are required together')
+  }
+  if (countryCode.length !== 2) throw new Error('Country code must be two letters')
+
+  const now = new Date()
+  await db
+    .insert(auctionCustomerProfile)
+    .values({
+      userId,
+      normalizedName: buyer.normalizedName,
+      displayName: buyer.displayName,
+      email: email || null,
+      phone: phone || null,
+      address1: address1 || null,
+      address2: address2 || null,
+      city: city || null,
+      state: state || null,
+      postalCode: postalCode || null,
+      countryCode,
+      shopifyCustomerId: buyer.shopifyCustomerId,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: [
+        auctionCustomerProfile.userId,
+        auctionCustomerProfile.normalizedName,
+      ],
+      set: {
+        displayName: buyer.displayName,
+        email: email || null,
+        phone: phone || null,
+        address1: address1 || null,
+        address2: address2 || null,
+        city: city || null,
+        state: state || null,
+        postalCode: postalCode || null,
+        countryCode,
+        updatedAt: now,
+      },
+    })
+
+  await db
+    .update(auctionBuyer)
+    .set({ email: email || null, updatedAt: now })
+    .where(eq(auctionBuyer.id, input.buyerId))
+
+  revalidatePath('/auction')
+  return { ok: true }
+}
+
 export async function saveBuyerContactAction(input: {
   auctionId: number
   buyerId: number
@@ -654,10 +798,40 @@ export async function saveBuyerContactAction(input: {
   await requireAuction(userId, input.auctionId)
   const email = input.email.trim().toLowerCase()
 
+  const [buyer] = await db
+    .select()
+    .from(auctionBuyer)
+    .where(and(eq(auctionBuyer.id, input.buyerId), eq(auctionBuyer.auctionId, input.auctionId)))
+    .limit(1)
+  if (!buyer) throw new Error('Buyer not found')
+
+  const now = new Date()
   await db
     .update(auctionBuyer)
-    .set({ email: email || null, updatedAt: new Date() })
-    .where(and(eq(auctionBuyer.id, input.buyerId), eq(auctionBuyer.auctionId, input.auctionId)))
+    .set({ email: email || null, updatedAt: now })
+    .where(eq(auctionBuyer.id, input.buyerId))
+
+  await db
+    .insert(auctionCustomerProfile)
+    .values({
+      userId,
+      normalizedName: buyer.normalizedName,
+      displayName: buyer.displayName,
+      email: email || null,
+      countryCode: 'US',
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: [
+        auctionCustomerProfile.userId,
+        auctionCustomerProfile.normalizedName,
+      ],
+      set: {
+        displayName: buyer.displayName,
+        email: email || null,
+        updatedAt: now,
+      },
+    })
 
   revalidatePath('/auction')
   return { ok: true }
