@@ -27,7 +27,7 @@ type EditItemInput = {
   buyerName?: string
   price: string
   status: 'open' | 'sold' | 'unsold'
-  saleType: 'quick' | 'auction'
+  saleType: 'quick' | 'auction' | 'legacy'
 }
 
 async function currentUserId() {
