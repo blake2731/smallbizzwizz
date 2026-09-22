@@ -1706,3 +1706,13 @@
   font-size: 10px;
   letter-spacing: 0.04em;
 }
+
+
+.shopifyLabelPanel {
+  display: grid;
+  gap: 9px;
+  border: 1px solid rgba(57, 214, 156, 0.32);
+  border-radius: 12px;
+  background: rgba(57, 214, 156, 0.05);
+  padding: 11px;
+}
