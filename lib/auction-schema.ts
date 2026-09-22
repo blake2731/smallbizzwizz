@@ -43,6 +43,10 @@ export const auctionBuyer = pgTable(
     email: text('email'),
     shopifyCustomerId: text('shopify_customer_id'),
     shippingCents: integer('shipping_cents'),
+    packageWeightOunces: integer('package_weight_ounces'),
+    packageLengthHundredths: integer('package_length_hundredths'),
+    packageWidthHundredths: integer('package_width_hundredths'),
+    packageHeightHundredths: integer('package_height_hundredths'),
     packageStatus: text('package_status')
       .$type<'unpacked' | 'packed'>()
       .notNull()
@@ -64,6 +68,30 @@ export const auctionBuyer = pgTable(
   (t) => [
     uniqueIndex('auction_buyer_auction_name_unique').on(t.auctionId, t.normalizedName),
     index('auction_buyer_auction_updated_idx').on(t.auctionId, t.updatedAt),
+  ],
+)
+
+export const auctionCustomerProfile = pgTable(
+  'auction_customer_profile',
+  {
+    id: serial('id').primaryKey(),
+    userId: text('user_id').notNull(),
+    normalizedName: text('normalized_name').notNull(),
+    displayName: text('display_name').notNull(),
+    email: text('email'),
+    phone: text('phone'),
+    address1: text('address_1'),
+    address2: text('address_2'),
+    city: text('city'),
+    state: text('state'),
+    postalCode: text('postal_code'),
+    countryCode: text('country_code').notNull().default('US'),
+    shopifyCustomerId: text('shopify_customer_id'),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex('auction_customer_profile_user_name_unique').on(t.userId, t.normalizedName),
+    index('auction_customer_profile_user_updated_idx').on(t.userId, t.updatedAt),
   ],
 )
 
@@ -115,5 +143,6 @@ export const auctionItem = pgTable(
 
 export type AuctionSession = typeof auctionSession.$inferSelect
 export type AuctionBuyer = typeof auctionBuyer.$inferSelect
+export type AuctionCustomerProfile = typeof auctionCustomerProfile.$inferSelect
 export type AuctionCustomerPreference = typeof auctionCustomerPreference.$inferSelect
 export type AuctionItem = typeof auctionItem.$inferSelect
