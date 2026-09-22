@@ -4,7 +4,6 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   createShopifyDraftOrderAction,
-  getShippoShippingRatesAction,
   purchaseShopifyLabelAction,
   refreshShopifyLabelAction,
   saveBuyerContactAction,
@@ -15,14 +14,15 @@ import {
   setBuyerPaymentAction,
   setBuyerPaymentPreferenceAction,
   setBuyerPrivateGroupAction,
-  setBuyerShippingAction,
 } from './actions'
+import BuyerPackagesEditor from './BuyerPackagesEditor'
 import styles from './auction.module.css'
 
 type Item = {
   id: number
   itemName: string
   priceCents: number
+  packageId: number | null
 }
 
 type Buyer = {
@@ -59,6 +59,23 @@ type Buyer = {
   subtotalCents: number
   discountCents: number
   dueCents: number | null
+  packages: Array<{
+    id: number
+    packageNumber: number
+    weightOunces: number | null
+    lengthHundredths: number | null
+    widthHundredths: number | null
+    heightHundredths: number | null
+    shippingCents: number | null
+    status: 'unpacked' | 'packed'
+    shippoShipmentId: string | null
+    shippoRateId: string | null
+    shippoProvider: string | null
+    shippoService: string | null
+    shippoRateCents: number | null
+    shippoTransactionId: string | null
+    shippoLabelUrl: string | null
+  }>
   shippingProfile: {
     id: number
     displayName: string
@@ -94,11 +111,6 @@ function paymentMethodLabel(value: string | null) {
   return PAYMENT_METHODS.find(([key]) => key === value)?.[1] ?? value ?? 'Unknown'
 }
 
-function dimensionValue(hundredths: number | null) {
-  if (hundredths === null) return ''
-  return String(hundredths / 100)
-}
-
 export default function BuyerCard({
   auctionId,
   auctionTitle,
@@ -111,19 +123,6 @@ export default function BuyerCard({
   mode: 'buyers' | 'pack' | 'invoice'
 }) {
   const router = useRouter()
-  const [shipping, setShipping] = useState(
-    buyer.shippingCents === null ? '' : (buyer.shippingCents / 100).toFixed(2),
-  )
-  const [packed, setPacked] = useState(buyer.packageStatus === 'packed')
-  const [weightPounds, setWeightPounds] = useState(
-    buyer.packageWeightOunces === null ? '' : String(Math.floor(buyer.packageWeightOunces / 16)),
-  )
-  const [weightOunces, setWeightOunces] = useState(
-    buyer.packageWeightOunces === null ? '' : String(buyer.packageWeightOunces % 16),
-  )
-  const [length, setLength] = useState(dimensionValue(buyer.packageLengthHundredths))
-  const [width, setWidth] = useState(dimensionValue(buyer.packageWidthHundredths))
-  const [height, setHeight] = useState(dimensionValue(buyer.packageHeightHundredths))
   const [email, setEmail] = useState(buyer.email ?? buyer.shippingProfile?.email ?? '')
   const [phone, setPhone] = useState(buyer.shippingProfile?.phone ?? '')
   const [address1, setAddress1] = useState(buyer.shippingProfile?.address1 ?? '')
@@ -146,20 +145,6 @@ export default function BuyerCard({
   const [shopifyTotalCents, setShopifyTotalCents] = useState(
     buyer.shopifyDraftOrderTotalCents,
   )
-  const [shippingRates, setShippingRates] = useState<
-    Array<{
-      rateId: string
-      shipmentId: string
-      provider: string
-      service: string
-      serviceToken: string
-      amountCents: number | null
-      currencyCode: string
-      estimatedDays: number | null
-      durationTerms: string
-      attributes: string[]
-    }>
-  >([])
   const [shopifyLabelUrl, setShopifyLabelUrl] = useState(buyer.shopifyLabelUrl ?? '')
   const [shopifyTrackingNumber, setShopifyTrackingNumber] = useState(
     buyer.shopifyTrackingNumber ?? '',
@@ -169,81 +154,6 @@ export default function BuyerCard({
   )
   const [shopifyCarrier, setShopifyCarrier] = useState(buyer.shopifyCarrier ?? '')
   const [pending, startTransition] = useTransition()
-
-  function loadShippoRates() {
-    setMessage('')
-    startTransition(() => {
-      void (async () => {
-        try {
-          const result = await getShippoShippingRatesAction({
-            auctionId,
-            buyerId: buyer.id,
-            weightPounds,
-            weightOunces,
-            length,
-            width,
-            height,
-            address1,
-            address2,
-            city,
-            state,
-            postalCode,
-            phone,
-            email,
-            countryCode: 'US',
-          })
-          setShippingRates(result.rates)
-          const cheapest = result.rates[0]
-          if (cheapest?.amountCents !== null && cheapest?.amountCents !== undefined) {
-            setShipping((cheapest.amountCents / 100).toFixed(2))
-            setMessage(
-              'Cheapest rate selected: ' +
-                cheapest.provider +
-                ' ' +
-                cheapest.service +
-                ' ' +
-                dollars(cheapest.amountCents),
-            )
-          } else {
-            setMessage('Shippo shipping rates loaded.')
-          }
-        } catch (error) {
-          setShippingRates([])
-          setMessage(error instanceof Error ? error.message : 'Could not load Shippo shipping rates.')
-        }
-      })()
-    })
-  }
-
-  async function copyShipment() {
-    const addressLines = [
-      buyer.displayName,
-      address1.trim(),
-      address2.trim(),
-      [city.trim(), state.trim(), postalCode.trim()].filter(Boolean).join(', ').replace(', ' + postalCode.trim(), ' ' + postalCode.trim()),
-      phone.trim() ? 'Phone: ' + phone.trim() : null,
-      email.trim() ? 'Email: ' + email.trim() : null,
-      '',
-      'Weight: ' + (weightPounds || '0') + ' lb ' + (weightOunces || '0') + ' oz',
-      'Dimensions: ' + (length || '?') + ' x ' + (width || '?') + ' x ' + (height || '?') + ' in',
-    ].filter((line) => line !== null && line !== '').join('\n')
-
-    try {
-      await navigator.clipboard.writeText(addressLines)
-    } catch {
-      const textarea = document.createElement('textarea')
-      textarea.value = addressLines
-      textarea.style.position = 'fixed'
-      textarea.style.opacity = '0'
-      document.body.appendChild(textarea)
-      textarea.focus()
-      textarea.select()
-      document.execCommand('copy')
-      textarea.remove()
-    }
-
-    setMessage('Shipment details copied.')
-  }
 
   async function copyText(value: string, success: string) {
     try {
@@ -641,190 +551,21 @@ export default function BuyerCard({
             </button>
           </div>
 
-          <div className={styles.packagePanel}>
-            <div className={styles.packSectionTitle}>
-              <div>
-                <strong>Package</strong>
-                <small>We will use these values for shipping rates and labels.</small>
-              </div>
-            </div>
-
-            <div className={styles.packageMeasureGrid}>
-              <label className={styles.fieldGroup}>
-                <span>Pounds</span>
-                <input
-                  className={styles.compactInput}
-                  inputMode="numeric"
-                  value={weightPounds}
-                  onChange={(event) => setWeightPounds(event.target.value)}
-                  placeholder="0"
-                  disabled={pending}
-                />
-              </label>
-              <label className={styles.fieldGroup}>
-                <span>Ounces</span>
-                <input
-                  className={styles.compactInput}
-                  inputMode="numeric"
-                  value={weightOunces}
-                  onChange={(event) => setWeightOunces(event.target.value)}
-                  placeholder="0"
-                  disabled={pending}
-                />
-              </label>
-              <label className={styles.fieldGroup}>
-                <span>Length in</span>
-                <input
-                  className={styles.compactInput}
-                  inputMode="decimal"
-                  value={length}
-                  onChange={(event) => setLength(event.target.value)}
-                  placeholder="12"
-                  disabled={pending}
-                />
-              </label>
-              <label className={styles.fieldGroup}>
-                <span>Width in</span>
-                <input
-                  className={styles.compactInput}
-                  inputMode="decimal"
-                  value={width}
-                  onChange={(event) => setWidth(event.target.value)}
-                  placeholder="9"
-                  disabled={pending}
-                />
-              </label>
-              <label className={styles.fieldGroup}>
-                <span>Height in</span>
-                <input
-                  className={styles.compactInput}
-                  inputMode="decimal"
-                  value={height}
-                  onChange={(event) => setHeight(event.target.value)}
-                  placeholder="2"
-                  disabled={pending}
-                />
-              </label>
-              <label className={styles.fieldGroup}>
-                <span>Shipping charge</span>
-                <div className={styles.moneyInputWrapSmall}>
-                  <span className={styles.currency}>$</span>
-                  <input
-                    className={styles.compactInput}
-                    inputMode="decimal"
-                    value={shipping}
-                    onChange={(event) => setShipping(event.target.value)}
-                    placeholder="0.00"
-                    disabled={pending}
-                  />
-                </div>
-              </label>
-            </div>
-
-            <div className={styles.shopifyRatesPanel}>
-              <div className={styles.packSectionTitle}>
-                <div>
-                  <strong>Live shipping rates</strong>
-                  <small>Shippo compares the available carrier rates using this exact address, weight, and package size.</small>
-                </div>
-              </div>
-
-              <button
-                className={styles.secondaryAction}
-                type="button"
-                onClick={loadShippoRates}
-                disabled={
-                  pending ||
-                  !address1.trim() ||
-                  !city.trim() ||
-                  !state.trim() ||
-                  !postalCode.trim() ||
-                  (!weightPounds.trim() && !weightOunces.trim()) ||
-                  !length.trim() ||
-                  !width.trim() ||
-                  !height.trim()
-                }
-              >
-                Get cheapest shipping rates
-              </button>
-
-              {shippingRates.length ? (
-                <div className={styles.shippingRateList}>
-                  {shippingRates.map((rate, index) => (
-                    <button
-                      className={styles.shippingRateButton}
-                      type="button"
-                      key={rate.rateId}
-                      onClick={() => {
-                        if (rate.amountCents === null) return
-                        setShipping((rate.amountCents / 100).toFixed(2))
-                        setMessage(rate.provider + ' ' + rate.service + ' selected for shipping.')
-                      }}
-                      disabled={pending || rate.amountCents === null}
-                    >
-                      <span>
-                        <strong>
-                          {index === 0 ? 'Cheapest · ' : ''}
-                          {rate.provider} {rate.service}
-                        </strong>
-                        <small>
-                          {rate.estimatedDays !== null
-                            ? String(rate.estimatedDays) + ' estimated days'
-                            : rate.durationTerms || 'Delivery estimate unavailable'}
-                        </small>
-                      </span>
-                      <b>{dollars(rate.amountCents)}</b>
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-
-            <label className={styles.packCheck}>
-              <input
-                type="checkbox"
-                checked={packed}
-                onChange={(event) => setPacked(event.target.checked)}
-                disabled={pending}
-              />
-              <span>Package is packed and measured</span>
-            </label>
-
-            <div className={styles.packageActions}>
-              <button
-                className={styles.secondaryAction}
-                type="button"
-                onClick={() =>
-                  run(
-                    () =>
-                      setBuyerShippingAction({
-                        auctionId,
-                        buyerId: buyer.id,
-                        shipping,
-                        packed,
-                        weightPounds,
-                        weightOunces,
-                        length,
-                        width,
-                        height,
-                      }),
-                    'Package saved.',
-                  )
-                }
-                disabled={pending}
-              >
-                Save package
-              </button>
-              <button
-                className={styles.copyShipmentButton}
-                type="button"
-                onClick={copyShipment}
-                disabled={pending || !address1.trim() || !city.trim() || !state.trim() || !postalCode.trim()}
-              >
-                Copy shipment details
-              </button>
-            </div>
-          </div>
+          <BuyerPackagesEditor
+            auctionId={auctionId}
+            buyerId={buyer.id}
+            packages={buyer.packages}
+            items={buyer.items}
+            destination={{
+              address1,
+              address2,
+              city,
+              state,
+              postalCode,
+              phone,
+              email,
+            }}
+          />
 
           <label className={styles.toggleRow}>
             <input
