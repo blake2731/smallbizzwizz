@@ -288,6 +288,20 @@ export async function ensureAuctionSchema() {
         ADD COLUMN IF NOT EXISTS package_id integer REFERENCES auction_package(id) ON DELETE SET NULL
       `)
       await db.execute(sql`
+        UPDATE auction_item i
+        SET package_id = p.id
+        FROM auction_package p
+        WHERE i.buyer_id = p.buyer_id
+          AND p.package_number = 1
+          AND i.package_id IS NULL
+          AND NOT EXISTS (
+            SELECT 1
+            FROM auction_package p2
+            WHERE p2.buyer_id = i.buyer_id
+              AND p2.id <> p.id
+          )
+      `)
+      await db.execute(sql`
         ALTER TABLE auction_item
         ADD COLUMN IF NOT EXISTS sale_type text NOT NULL DEFAULT 'quick'
       `)
