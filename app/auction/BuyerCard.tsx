@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   saveBuyerContactAction,
+  saveBuyerShippingProfileAction,
   setBuyerInvoiceStatusAction,
   setBuyerPaymentAction,
   setBuyerPaymentPreferenceAction,
@@ -24,6 +25,10 @@ type Buyer = {
   privateGroup: boolean
   email: string | null
   shippingCents: number | null
+  packageWeightOunces: number | null
+  packageLengthHundredths: number | null
+  packageWidthHundredths: number | null
+  packageHeightHundredths: number | null
   packageStatus: 'unpacked' | 'packed'
   invoiceStatus: 'not_ready' | 'ready' | 'sent' | 'paid'
   invoiceMethod: 'messenger' | 'shopify' | 'other' | null
@@ -34,6 +39,18 @@ type Buyer = {
   subtotalCents: number
   discountCents: number
   dueCents: number | null
+  shippingProfile: {
+    id: number
+    displayName: string
+    email: string | null
+    phone: string | null
+    address1: string | null
+    address2: string | null
+    city: string | null
+    state: string | null
+    postalCode: string | null
+    countryCode: string
+  } | null
   items: Item[]
 }
 
@@ -57,6 +74,11 @@ function paymentMethodLabel(value: string | null) {
   return PAYMENT_METHODS.find(([key]) => key === value)?.[1] ?? value ?? 'Unknown'
 }
 
+function dimensionValue(hundredths: number | null) {
+  if (hundredths === null) return ''
+  return String(hundredths / 100)
+}
+
 export default function BuyerCard({
   auctionId,
   auctionTitle,
@@ -73,7 +95,22 @@ export default function BuyerCard({
     buyer.shippingCents === null ? '' : (buyer.shippingCents / 100).toFixed(2),
   )
   const [packed, setPacked] = useState(buyer.packageStatus === 'packed')
-  const [email, setEmail] = useState(buyer.email ?? '')
+  const [weightPounds, setWeightPounds] = useState(
+    buyer.packageWeightOunces === null ? '' : String(Math.floor(buyer.packageWeightOunces / 16)),
+  )
+  const [weightOunces, setWeightOunces] = useState(
+    buyer.packageWeightOunces === null ? '' : String(buyer.packageWeightOunces % 16),
+  )
+  const [length, setLength] = useState(dimensionValue(buyer.packageLengthHundredths))
+  const [width, setWidth] = useState(dimensionValue(buyer.packageWidthHundredths))
+  const [height, setHeight] = useState(dimensionValue(buyer.packageHeightHundredths))
+  const [email, setEmail] = useState(buyer.email ?? buyer.shippingProfile?.email ?? '')
+  const [phone, setPhone] = useState(buyer.shippingProfile?.phone ?? '')
+  const [address1, setAddress1] = useState(buyer.shippingProfile?.address1 ?? '')
+  const [address2, setAddress2] = useState(buyer.shippingProfile?.address2 ?? '')
+  const [city, setCity] = useState(buyer.shippingProfile?.city ?? '')
+  const [state, setState] = useState(buyer.shippingProfile?.state ?? '')
+  const [postalCode, setPostalCode] = useState(buyer.shippingProfile?.postalCode ?? '')
   const [paymentMethod, setPaymentMethod] = useState(
     buyer.paymentMethod ?? buyer.preferredPaymentMethod ?? 'paypal',
   )
@@ -83,6 +120,36 @@ export default function BuyerCard({
   const [message, setMessage] = useState('')
   const [copyLabel, setCopyLabel] = useState('Copy invoice for Messenger')
   const [pending, startTransition] = useTransition()
+
+  async function copyShipment() {
+    const addressLines = [
+      buyer.displayName,
+      address1.trim(),
+      address2.trim(),
+      [city.trim(), state.trim(), postalCode.trim()].filter(Boolean).join(', ').replace(', ' + postalCode.trim(), ' ' + postalCode.trim()),
+      phone.trim() ? 'Phone: ' + phone.trim() : null,
+      email.trim() ? 'Email: ' + email.trim() : null,
+      '',
+      'Weight: ' + (weightPounds || '0') + ' lb ' + (weightOunces || '0') + ' oz',
+      'Dimensions: ' + (length || '?') + ' x ' + (width || '?') + ' x ' + (height || '?') + ' in',
+    ].filter((line) => line !== null && line !== '').join('\n')
+
+    try {
+      await navigator.clipboard.writeText(addressLines)
+    } catch {
+      const textarea = document.createElement('textarea')
+      textarea.value = addressLines
+      textarea.style.position = 'fixed'
+      textarea.style.opacity = '0'
+      document.body.appendChild(textarea)
+      textarea.focus()
+      textarea.select()
+      document.execCommand('copy')
+      textarea.remove()
+    }
+
+    setMessage('Shipment details copied.')
+  }
 
   async function copyInvoice() {
     if (buyer.dueCents === null || buyer.shippingCents === null) {
@@ -234,21 +301,203 @@ export default function BuyerCard({
 
       {mode === 'pack' ? (
         <div className={styles.buyerControls}>
-          <div className={styles.compactGrid}>
-            <label className={styles.fieldGroup}>
-              <span>Shipping</span>
-              <div className={styles.moneyInputWrapSmall}>
-                <span className={styles.currency}>$</span>
+          <div className={styles.shippingProfilePanel}>
+            <div className={styles.packSectionTitle}>
+              <div>
+                <strong>Ship to</strong>
+                <small>Saved for this customer and reused in future auctions.</small>
+              </div>
+              {buyer.shippingProfile?.address1 ? (
+                <span className={styles.profileStatus}>Saved customer</span>
+              ) : (
+                <span className={styles.profileStatusMuted}>Needs address</span>
+              )}
+            </div>
+
+            <div className={styles.addressGrid}>
+              <label className={styles.fieldGroup}>
+                <span>Address</span>
+                <input
+                  className={styles.compactInput}
+                  value={address1}
+                  onChange={(event) => setAddress1(event.target.value)}
+                  placeholder="Street address"
+                  disabled={pending}
+                />
+              </label>
+              <label className={styles.fieldGroup}>
+                <span>Apartment or unit</span>
+                <input
+                  className={styles.compactInput}
+                  value={address2}
+                  onChange={(event) => setAddress2(event.target.value)}
+                  placeholder="Optional"
+                  disabled={pending}
+                />
+              </label>
+              <label className={styles.fieldGroup}>
+                <span>City</span>
+                <input
+                  className={styles.compactInput}
+                  value={city}
+                  onChange={(event) => setCity(event.target.value)}
+                  placeholder="City"
+                  disabled={pending}
+                />
+              </label>
+              <label className={styles.fieldGroup}>
+                <span>State</span>
+                <input
+                  className={styles.compactInput}
+                  value={state}
+                  onChange={(event) => setState(event.target.value.toUpperCase())}
+                  placeholder="VA"
+                  maxLength={3}
+                  disabled={pending}
+                />
+              </label>
+              <label className={styles.fieldGroup}>
+                <span>ZIP</span>
+                <input
+                  className={styles.compactInput}
+                  value={postalCode}
+                  onChange={(event) => setPostalCode(event.target.value)}
+                  placeholder="24333"
+                  inputMode="numeric"
+                  disabled={pending}
+                />
+              </label>
+              <label className={styles.fieldGroup}>
+                <span>Phone</span>
+                <input
+                  className={styles.compactInput}
+                  value={phone}
+                  onChange={(event) => setPhone(event.target.value)}
+                  placeholder="Optional"
+                  inputMode="tel"
+                  disabled={pending}
+                />
+              </label>
+              <label className={styles.fieldGroup}>
+                <span>Email</span>
+                <input
+                  className={styles.compactInput}
+                  type="email"
+                  inputMode="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="Optional"
+                  disabled={pending}
+                />
+              </label>
+            </div>
+
+            <button
+              className={styles.secondaryAction}
+              type="button"
+              onClick={() =>
+                run(
+                  () =>
+                    saveBuyerShippingProfileAction({
+                      auctionId,
+                      buyerId: buyer.id,
+                      email,
+                      phone,
+                      address1,
+                      address2,
+                      city,
+                      state,
+                      postalCode,
+                      countryCode: 'US',
+                    }),
+                  'Customer shipping information saved.',
+                )
+              }
+              disabled={pending}
+            >
+              Save customer shipping info
+            </button>
+          </div>
+
+          <div className={styles.packagePanel}>
+            <div className={styles.packSectionTitle}>
+              <div>
+                <strong>Package</strong>
+                <small>We will use these values for shipping rates and labels.</small>
+              </div>
+            </div>
+
+            <div className={styles.packageMeasureGrid}>
+              <label className={styles.fieldGroup}>
+                <span>Pounds</span>
+                <input
+                  className={styles.compactInput}
+                  inputMode="numeric"
+                  value={weightPounds}
+                  onChange={(event) => setWeightPounds(event.target.value)}
+                  placeholder="0"
+                  disabled={pending}
+                />
+              </label>
+              <label className={styles.fieldGroup}>
+                <span>Ounces</span>
+                <input
+                  className={styles.compactInput}
+                  inputMode="numeric"
+                  value={weightOunces}
+                  onChange={(event) => setWeightOunces(event.target.value)}
+                  placeholder="0"
+                  disabled={pending}
+                />
+              </label>
+              <label className={styles.fieldGroup}>
+                <span>Length in</span>
                 <input
                   className={styles.compactInput}
                   inputMode="decimal"
-                  value={shipping}
-                  onChange={(event) => setShipping(event.target.value)}
-                  placeholder="0.00"
+                  value={length}
+                  onChange={(event) => setLength(event.target.value)}
+                  placeholder="12"
                   disabled={pending}
                 />
-              </div>
-            </label>
+              </label>
+              <label className={styles.fieldGroup}>
+                <span>Width in</span>
+                <input
+                  className={styles.compactInput}
+                  inputMode="decimal"
+                  value={width}
+                  onChange={(event) => setWidth(event.target.value)}
+                  placeholder="9"
+                  disabled={pending}
+                />
+              </label>
+              <label className={styles.fieldGroup}>
+                <span>Height in</span>
+                <input
+                  className={styles.compactInput}
+                  inputMode="decimal"
+                  value={height}
+                  onChange={(event) => setHeight(event.target.value)}
+                  placeholder="2"
+                  disabled={pending}
+                />
+              </label>
+              <label className={styles.fieldGroup}>
+                <span>Shipping charge</span>
+                <div className={styles.moneyInputWrapSmall}>
+                  <span className={styles.currency}>$</span>
+                  <input
+                    className={styles.compactInput}
+                    inputMode="decimal"
+                    value={shipping}
+                    onChange={(event) => setShipping(event.target.value)}
+                    placeholder="0.00"
+                    disabled={pending}
+                  />
+                </div>
+              </label>
+            </div>
 
             <label className={styles.packCheck}>
               <input
@@ -257,29 +506,44 @@ export default function BuyerCard({
                 onChange={(event) => setPacked(event.target.checked)}
                 disabled={pending}
               />
-              <span>Package is packed</span>
+              <span>Package is packed and measured</span>
             </label>
-          </div>
 
-          <button
-            className={styles.secondaryAction}
-            type="button"
-            onClick={() =>
-              run(
-                () =>
-                  setBuyerShippingAction({
-                    auctionId,
-                    buyerId: buyer.id,
-                    shipping,
-                    packed,
-                  }),
-                'Packaging saved.',
-              )
-            }
-            disabled={pending}
-          >
-            Save package
-          </button>
+            <div className={styles.packageActions}>
+              <button
+                className={styles.secondaryAction}
+                type="button"
+                onClick={() =>
+                  run(
+                    () =>
+                      setBuyerShippingAction({
+                        auctionId,
+                        buyerId: buyer.id,
+                        shipping,
+                        packed,
+                        weightPounds,
+                        weightOunces,
+                        length,
+                        width,
+                        height,
+                      }),
+                    'Package saved.',
+                  )
+                }
+                disabled={pending}
+              >
+                Save package
+              </button>
+              <button
+                className={styles.copyShipmentButton}
+                type="button"
+                onClick={copyShipment}
+                disabled={pending || !address1.trim() || !city.trim() || !state.trim() || !postalCode.trim()}
+              >
+                Copy shipment details
+              </button>
+            </div>
+          </div>
 
           <label className={styles.toggleRow}>
             <input
