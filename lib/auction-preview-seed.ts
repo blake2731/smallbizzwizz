@@ -1,6 +1,6 @@
-import { and, eq, ne } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
-import { auctionBuyer, auctionCustomerPreference, auctionItem, auctionSession } from '@/lib/auction-schema'
+import { auctionBuyer, auctionItem, auctionSession } from '@/lib/auction-schema'
 import { ensureAuctionSchema, normalizeBuyerName } from '@/lib/auction'
 
 const PREVIEW_OWNER = 'auction-preview-owner'
@@ -128,12 +128,6 @@ export async function resetLatestAuctionPreview(userId: string) {
 
   await db.delete(auctionItem).where(eq(auctionItem.auctionId, auctionId))
   await db.delete(auctionBuyer).where(eq(auctionBuyer.auctionId, auctionId))
-  await db
-    .delete(auctionCustomerPreference)
-    .where(eq(auctionCustomerPreference.userId, PREVIEW_OWNER))
-  await db
-    .delete(auctionSession)
-    .where(and(eq(auctionSession.userId, PREVIEW_OWNER), ne(auctionSession.id, auctionId)))
 
   await db
     .update(auctionSession)
