@@ -548,7 +548,7 @@
 
 .activityRow {
   display: grid;
-  grid-template-columns: 10px minmax(0, 1fr) auto;
+  grid-template-columns: 10px minmax(0, 1fr) auto auto;
   gap: 10px;
   align-items: center;
   border-bottom: 1px solid #202736;
@@ -872,7 +872,7 @@
   margin-top: 24px;
 }
 
-@media (max-width: 980px) {
+@media (max-width: 1120px) {
   .liveLayout {
     grid-template-columns: 1fr;
   }
@@ -986,5 +986,327 @@
   .emailRow,
   .invoiceActions {
     flex-direction: column;
+  }
+}
+
+
+.saleModeSwitch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 16px;
+  border-radius: 14px;
+  background: #090d13;
+  padding: 5px;
+}
+
+.saleMode,
+.saleModeActive {
+  min-height: 48px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #7f899d;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.saleModeActive {
+  background: #1b2230;
+  color: white;
+  box-shadow: inset 0 0 0 1px #30394a;
+}
+
+.openPill {
+  margin-left: 7px;
+  border-radius: 999px;
+  background: rgba(57, 214, 156, 0.15);
+  padding: 3px 7px;
+  color: #66dcae;
+  font-size: 8px;
+  letter-spacing: 0.07em;
+}
+
+.auctionLot {
+  display: grid;
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.currentLotCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  border: 1px solid rgba(101, 113, 255, 0.42);
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(101, 113, 255, 0.14), rgba(12, 16, 23, 0.96));
+  padding: 16px;
+}
+
+.currentLotLabel {
+  color: #8d99ff;
+  font-size: 9px;
+  font-weight: 950;
+  letter-spacing: 0.12em;
+}
+
+.currentLotCard h3 {
+  margin: 5px 0 0;
+  font-size: 21px;
+  letter-spacing: -0.025em;
+}
+
+.highBid {
+  min-width: 150px;
+  text-align: right;
+}
+
+.highBid span,
+.highBid small {
+  display: block;
+  color: #7f899d;
+  font-size: 10px;
+}
+
+.highBid strong {
+  display: block;
+  margin: 3px 0;
+  font-size: 30px;
+  letter-spacing: -0.04em;
+}
+
+.bidButton,
+.startLotButton {
+  min-height: 58px;
+  border: 0;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #5966ea, #7280ff);
+  color: white;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 950;
+  cursor: pointer;
+}
+
+.closeLotButtons {
+  display: grid;
+  grid-template-columns: 2fr 1fr;
+  gap: 10px;
+}
+
+.openDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: #8d99ff;
+  box-shadow: 0 0 14px rgba(141, 153, 255, 0.5);
+}
+
+.activityPanel {
+  max-height: calc(100vh - 100px);
+  overflow: hidden;
+}
+
+.activityList {
+  max-height: calc(100vh - 190px);
+  overflow-y: auto;
+  padding-right: 3px;
+}
+
+.activityItemWrap {
+  border-bottom: 1px solid #202736;
+}
+
+.activityItemWrap .activityRow {
+  border-bottom: 0;
+}
+
+.activityTitleLine {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.activityTitleLine strong {
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.auctionTag,
+.quickTag {
+  flex: 0 0 auto;
+  border-radius: 999px;
+  padding: 2px 6px;
+  font-size: 7px !important;
+  font-weight: 950;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.auctionTag {
+  background: rgba(141, 153, 255, 0.12);
+  color: #aab2ff !important;
+}
+
+.quickTag {
+  background: rgba(57, 214, 156, 0.1);
+  color: #72dcb4 !important;
+}
+
+.editButton {
+  min-height: 32px;
+  border: 1px solid #30394a;
+  border-radius: 9px;
+  background: #141a24;
+  padding: 0 9px;
+  color: #aeb8c8;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.inlineEditor {
+  display: grid;
+  gap: 10px;
+  border-top: 1px dashed #2c3545;
+  padding: 12px 0 14px 18px;
+}
+
+.editGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) minmax(110px, 0.7fr);
+  gap: 8px;
+}
+
+.statusPicker {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+}
+
+.statusChoice,
+.statusActive {
+  min-height: 38px;
+  border: 1px solid #2d3645;
+  border-radius: 9px;
+  background: #0f141d;
+  color: #7f899d;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.statusActive {
+  border-color: #6571ff;
+  background: rgba(101, 113, 255, 0.16);
+  color: white;
+}
+
+.editorActions {
+  display: flex;
+  gap: 7px;
+}
+
+.editorActions button {
+  flex: 1;
+}
+
+.fieldGroup em {
+  color: #667187;
+  font-style: normal;
+  font-weight: 650;
+}
+
+@media (max-width: 1120px) {
+  .shell {
+    padding-bottom: calc(88px + env(safe-area-inset-bottom));
+  }
+
+  .metricGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .metricPrimary {
+    grid-column: 1 / -1;
+  }
+
+  .tabs {
+    top: auto;
+    bottom: max(8px, env(safe-area-inset-bottom));
+  }
+
+  .tab,
+  .tabActive {
+    min-height: 58px;
+    font-size: 14px;
+  }
+
+  .liveEntry {
+    padding: 22px;
+  }
+
+  .bigInput,
+  .moneyInput {
+    min-height: 64px;
+  }
+
+  .buyerChip {
+    min-height: 46px;
+    padding: 0 16px;
+    font-size: 13px;
+  }
+
+  .soldButton,
+  .unsoldButton {
+    min-height: 76px;
+  }
+
+  .activityPanel {
+    position: static;
+    max-height: none;
+  }
+
+  .activityList {
+    max-height: none;
+    overflow: visible;
+  }
+}
+
+@media (max-width: 760px) {
+  .saleModeSwitch,
+  .closeLotButtons,
+  .editGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .currentLotCard {
+    align-items: flex-start;
+  }
+
+  .highBid {
+    min-width: 120px;
+  }
+
+  .activityRow {
+    grid-template-columns: 10px minmax(0, 1fr) auto;
+  }
+
+  .activityRow .activityPrice {
+    grid-column: 2;
+  }
+
+  .activityRow .editButton {
+    grid-column: 3;
+    grid-row: 1 / span 2;
+  }
+
+  .inlineEditor {
+    padding-left: 0;
   }
 }
