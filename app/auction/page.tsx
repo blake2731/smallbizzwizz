@@ -298,7 +298,7 @@ export default async function AuctionPage({
             </div>
             <div className={styles.cardGrid}>
               {buyers.map((buyer) => (
-                <BuyerCard key={buyer.id} auctionId={auction.id} buyer={buyer} mode="buyers" />
+                <BuyerCard key={buyer.id} auctionId={auction.id} auctionTitle={auction.title} buyer={buyer} mode="buyers" />
               ))}
             </div>
           </section>
@@ -318,7 +318,7 @@ export default async function AuctionPage({
             </div>
             <div className={styles.cardGrid}>
               {packBuyers.map((buyer) => (
-                <BuyerCard key={buyer.id} auctionId={auction.id} buyer={buyer} mode="pack" />
+                <BuyerCard key={buyer.id} auctionId={auction.id} auctionTitle={auction.title} buyer={buyer} mode="pack" />
               ))}
             </div>
           </section>
@@ -341,7 +341,7 @@ export default async function AuctionPage({
             </div>
             <div className={styles.cardGrid}>
               {invoiceBuyers.map((buyer) => (
-                <BuyerCard key={buyer.id} auctionId={auction.id} buyer={buyer} mode="invoice" />
+                <BuyerCard key={buyer.id} auctionId={auction.id} auctionTitle={auction.title} buyer={buyer} mode="invoice" />
               ))}
             </div>
           </section>
