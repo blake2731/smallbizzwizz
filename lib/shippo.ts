@@ -55,56 +55,69 @@ export async function shippoRequest<T>(
 }
 
 
-type ShippoAddress = {
-  object_id: string
-  name?: string
-  company?: string
-  city?: string
-  state?: string
-  zip?: string
-  country?: string
-  metadata?: string
+type ShippoAddressBookEntry = {
+  id: string
+  address: {
+    name?: string
+    organization?: string
+    address_line_1?: string
+    address_line_2?: string
+    city_locality?: string
+    state_province?: string
+    postal_code?: string
+    country_code?: string
+  }
+  created_at?: string
+  updated_at?: string
 }
 
-type ShippoAddressList = {
-  results?: ShippoAddress[]
+type ShippoAddressBookList = {
+  count?: number
+  results?: ShippoAddressBookEntry[]
+}
+
+export async function getShippoAddressBook() {
+  return shippoRequest<ShippoAddressBookList>('/v2/addresses?offset=0&limit=100', {
+    headers: {
+      Accept: 'application/json',
+    },
+  })
 }
 
 export async function resolveShippoOriginAddressId() {
   const explicit = process.env.SHIPPO_FROM_ADDRESS_ID?.trim()
   if (explicit) return explicit
 
-  const data = await shippoRequest<ShippoAddressList>('/addresses/?results=100')
+  const data = await getShippoAddressBook()
   const domestic = (data.results ?? []).filter(
-    (address) => (address.country ?? '').toUpperCase() === 'US',
+    (entry) => (entry.address.country_code ?? '').toUpperCase() === 'US',
   )
 
   if (domestic.length === 1) {
-    return domestic[0].object_id
+    return domestic[0].id
   }
 
-  const likely = domestic.filter((address) => {
+  const likely = domestic.filter((entry) => {
     const haystack = [
-      address.company,
-      address.name,
-      address.metadata,
+      entry.address.organization,
+      entry.address.name,
     ]
       .filter(Boolean)
       .join(' ')
       .toLowerCase()
 
-    return haystack.includes('crafty brother') || haystack.includes('ship from')
+    return haystack.includes('crafty brother')
   })
 
   if (likely.length === 1) {
-    return likely[0].object_id
+    return likely[0].id
   }
 
   if (!domestic.length) {
-    throw new Error('No US ship from address was found in Shippo.')
+    throw new Error('No US sender address was found in the Shippo address book.')
   }
 
   throw new Error(
-    'More than one Shippo ship from address is available. Set SHIPPO_FROM_ADDRESS_ID to the one Auction Console should use.',
+    'More than one Shippo sender address is saved. Choose the Auction Console sender address once and it will be reused.',
   )
 }
