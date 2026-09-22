@@ -1716,3 +1716,71 @@
   background: rgba(57, 214, 156, 0.05);
   padding: 11px;
 }
+
+
+.invoiceBatchPanel {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 16px;
+  border: 1px solid #293243;
+  border-radius: 16px;
+  background: #0a0f16;
+  padding: 16px;
+}
+
+.invoiceBatchStats {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.invoiceBatchStats > div {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #273142;
+  border-radius: 12px;
+  background: #101620;
+  padding: 10px;
+}
+
+.invoiceBatchStats span {
+  color: #7f899d;
+  font-size: 9px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.invoiceBatchStats strong {
+  color: #f5f7fb;
+  font-size: 18px;
+}
+
+.invoiceBatchActions {
+  display: grid;
+  grid-template-columns: minmax(220px, 360px) 1fr;
+  align-items: center;
+  gap: 12px;
+}
+
+.invoiceBatchActions small {
+  color: #7f899d;
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+@media (max-width: 900px) {
+  .invoiceBatchStats {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .invoiceBatchActions {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 620px) {
+  .invoiceBatchStats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
