@@ -48,7 +48,7 @@ const rows = [
   ['The Craft', 'Elaine Ressler', 4000],
 ] as const
 
-export async function ensureLatestAuctionPreview(userId: string) {
+export async function ensureLatestAuctionPreview(userId: string): Promise<number | null> {
   if (process.env.VERCEL_ENV !== 'preview' || userId !== PREVIEW_OWNER) return null
 
   await ensureAuctionSchema()
@@ -110,7 +110,7 @@ export async function ensureLatestAuctionPreview(userId: string) {
 }
 
 
-export async function resetLatestAuctionPreview(userId: string) {
+export async function resetLatestAuctionPreview(userId: string): Promise<number> {
   if (process.env.VERCEL_ENV !== 'preview' || userId !== PREVIEW_OWNER) {
     throw new Error('Preview reset is unavailable.')
   }
