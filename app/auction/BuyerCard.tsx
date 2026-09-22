@@ -17,12 +17,14 @@ import {
   setBuyerPrivateGroupAction,
   setBuyerShippingAction,
 } from './actions'
+import BuyerPackagesEditor from './BuyerPackagesEditor'
 import styles from './auction.module.css'
 
 type Item = {
   id: number
   itemName: string
   priceCents: number
+  packageId: number | null
 }
 
 type Buyer = {
@@ -59,6 +61,18 @@ type Buyer = {
   subtotalCents: number
   discountCents: number
   dueCents: number | null
+  packages: Array<{
+    id: number
+    packageNumber: number
+    weightOunces: number | null
+    lengthHundredths: number | null
+    widthHundredths: number | null
+    heightHundredths: number | null
+    shippingCents: number | null
+    status: 'unpacked' | 'packed'
+    shopifyLabelUrl: string | null
+    shopifyLabelPurchaseResultId: string | null
+  }>
   shippingProfile: {
     id: number
     displayName: string
@@ -619,180 +633,12 @@ export default function BuyerCard({
             </button>
           </div>
 
-          <div className={styles.packagePanel}>
-            <div className={styles.packSectionTitle}>
-              <div>
-                <strong>Package</strong>
-                <small>We will use these values for shipping rates and labels.</small>
-              </div>
-            </div>
-
-            <div className={styles.packageMeasureGrid}>
-              <label className={styles.fieldGroup}>
-                <span>Pounds</span>
-                <input
-                  className={styles.compactInput}
-                  inputMode="numeric"
-                  value={weightPounds}
-                  onChange={(event) => setWeightPounds(event.target.value)}
-                  placeholder="0"
-                  disabled={pending}
-                />
-              </label>
-              <label className={styles.fieldGroup}>
-                <span>Ounces</span>
-                <input
-                  className={styles.compactInput}
-                  inputMode="numeric"
-                  value={weightOunces}
-                  onChange={(event) => setWeightOunces(event.target.value)}
-                  placeholder="0"
-                  disabled={pending}
-                />
-              </label>
-              <label className={styles.fieldGroup}>
-                <span>Length in</span>
-                <input
-                  className={styles.compactInput}
-                  inputMode="decimal"
-                  value={length}
-                  onChange={(event) => setLength(event.target.value)}
-                  placeholder="12"
-                  disabled={pending}
-                />
-              </label>
-              <label className={styles.fieldGroup}>
-                <span>Width in</span>
-                <input
-                  className={styles.compactInput}
-                  inputMode="decimal"
-                  value={width}
-                  onChange={(event) => setWidth(event.target.value)}
-                  placeholder="9"
-                  disabled={pending}
-                />
-              </label>
-              <label className={styles.fieldGroup}>
-                <span>Height in</span>
-                <input
-                  className={styles.compactInput}
-                  inputMode="decimal"
-                  value={height}
-                  onChange={(event) => setHeight(event.target.value)}
-                  placeholder="2"
-                  disabled={pending}
-                />
-              </label>
-              <label className={styles.fieldGroup}>
-                <span>Shipping charge</span>
-                <div className={styles.moneyInputWrapSmall}>
-                  <span className={styles.currency}>$</span>
-                  <input
-                    className={styles.compactInput}
-                    inputMode="decimal"
-                    value={shipping}
-                    onChange={(event) => setShipping(event.target.value)}
-                    placeholder="0.00"
-                    disabled={pending}
-                  />
-                </div>
-              </label>
-            </div>
-
-            <div className={styles.shopifyRatesPanel}>
-              <div className={styles.packSectionTitle}>
-                <div>
-                  <strong>Shopify shipping rates</strong>
-                  <small>Uses the saved destination and package weight to price the shipment.</small>
-                </div>
-              </div>
-
-              <button
-                className={styles.secondaryAction}
-                type="button"
-                onClick={loadShopifyRates}
-                disabled={
-                  pending ||
-                  !address1.trim() ||
-                  !city.trim() ||
-                  !state.trim() ||
-                  !postalCode.trim() ||
-                  (!weightPounds.trim() && !weightOunces.trim())
-                }
-              >
-                Get Shopify shipping rates
-              </button>
-
-              {shippingRates.length ? (
-                <div className={styles.shippingRateList}>
-                  {shippingRates.map((rate) => (
-                    <button
-                      className={styles.shippingRateButton}
-                      type="button"
-                      key={rate.handle}
-                      onClick={() => {
-                        if (rate.amountCents === null) return
-                        setShipping((rate.amountCents / 100).toFixed(2))
-                        setMessage(rate.title + ' selected for shipping.')
-                      }}
-                      disabled={pending || rate.amountCents === null}
-                    >
-                      <span>
-                        <strong>{rate.title}</strong>
-                        <small>{rate.source || rate.code}</small>
-                      </span>
-                      <b>{dollars(rate.amountCents)}</b>
-                    </button>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-
-            <label className={styles.packCheck}>
-              <input
-                type="checkbox"
-                checked={packed}
-                onChange={(event) => setPacked(event.target.checked)}
-                disabled={pending}
-              />
-              <span>Package is packed and measured</span>
-            </label>
-
-            <div className={styles.packageActions}>
-              <button
-                className={styles.secondaryAction}
-                type="button"
-                onClick={() =>
-                  run(
-                    () =>
-                      setBuyerShippingAction({
-                        auctionId,
-                        buyerId: buyer.id,
-                        shipping,
-                        packed,
-                        weightPounds,
-                        weightOunces,
-                        length,
-                        width,
-                        height,
-                      }),
-                    'Package saved.',
-                  )
-                }
-                disabled={pending}
-              >
-                Save package
-              </button>
-              <button
-                className={styles.copyShipmentButton}
-                type="button"
-                onClick={copyShipment}
-                disabled={pending || !address1.trim() || !city.trim() || !state.trim() || !postalCode.trim()}
-              >
-                Copy shipment details
-              </button>
-            </div>
-          </div>
+          <BuyerPackagesEditor
+            auctionId={auctionId}
+            buyerId={buyer.id}
+            packages={buyer.packages}
+            items={buyer.items}
+          />
 
           <label className={styles.toggleRow}>
             <input
