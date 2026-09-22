@@ -416,6 +416,22 @@ export async function getAuctionState(userId: string, requestedId?: number | nul
     ON CONFLICT (buyer_id, package_number) DO NOTHING
   `)
 
+  await db.execute(sql`
+    UPDATE auction_item i
+    SET package_id = p.id
+    FROM auction_package p
+    INNER JOIN auction_buyer b ON b.id = p.buyer_id
+    WHERE b.auction_id = ${auction.id}
+      AND i.buyer_id = b.id
+      AND i.package_id IS NULL
+      AND NOT EXISTS (
+        SELECT 1
+        FROM auction_package p2
+        WHERE p2.buyer_id = b.id
+          AND p2.id <> p.id
+      )
+  `)
+
   const [buyers, allItems, buyerHistory, preferences, profiles, packages] = await Promise.all([
     db
       .select()
