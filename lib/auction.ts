@@ -103,6 +103,15 @@ export async function ensureAuctionSchema() {
         ALTER TABLE auction_buyer ADD COLUMN IF NOT EXISTS paid_cents integer
       `)
       await db.execute(sql`
+        ALTER TABLE auction_buyer ADD COLUMN IF NOT EXISTS shopify_draft_order_name text
+      `)
+      await db.execute(sql`
+        ALTER TABLE auction_buyer ADD COLUMN IF NOT EXISTS shopify_invoice_url text
+      `)
+      await db.execute(sql`
+        ALTER TABLE auction_buyer ADD COLUMN IF NOT EXISTS shopify_draft_order_total_cents integer
+      `)
+      await db.execute(sql`
         ALTER TABLE auction_buyer ADD COLUMN IF NOT EXISTS package_weight_ounces integer
       `)
       await db.execute(sql`
