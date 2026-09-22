@@ -74,7 +74,7 @@ export const auctionItem = pgTable(
     buyerId: integer('buyer_id').references(() => auctionBuyer.id, { onDelete: 'set null' }),
     itemName: text('item_name').notNull(),
     priceCents: integer('price_cents').notNull(),
-    saleType: text('sale_type').$type<'quick' | 'auction'>().notNull().default('quick'),
+    saleType: text('sale_type').$type<'quick' | 'auction' | 'legacy'>().notNull().default('quick'),
     status: text('status').$type<'open' | 'sold' | 'unsold' | 'void'>().notNull(),
     lastBidAt: timestamp('last_bid_at', { withTimezone: true }),
     voidedAt: timestamp('voided_at', { withTimezone: true }),
