@@ -499,21 +499,22 @@ async function syncBuyerPackageSummary(buyerId: number) {
 }
 
 async function requireBuyerPackage(auctionId: number, buyerId: number, packageId: number) {
+  const [buyer] = await db
+    .select({ id: auctionBuyer.id })
+    .from(auctionBuyer)
+    .where(and(eq(auctionBuyer.id, buyerId), eq(auctionBuyer.auctionId, auctionId)))
+    .limit(1)
+
+  if (!buyer) throw new Error('Buyer not found')
+
   const [pkg] = await db
-    .select({ package: auctionPackage })
+    .select()
     .from(auctionPackage)
-    .innerJoin(auctionBuyer, eq(auctionPackage.buyerId, auctionBuyer.id))
-    .where(
-      and(
-        eq(auctionPackage.id, packageId),
-        eq(auctionPackage.buyerId, buyerId),
-        eq(auctionBuyer.auctionId, auctionId),
-      ),
-    )
+    .where(and(eq(auctionPackage.id, packageId), eq(auctionPackage.buyerId, buyerId)))
     .limit(1)
 
   if (!pkg) throw new Error('Package not found')
-  return pkg.package
+  return pkg
 }
 
 export async function addAuctionPackageAction(input: {
