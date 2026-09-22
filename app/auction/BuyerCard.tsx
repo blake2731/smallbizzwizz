@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import {
   createShopifyDraftOrderAction,
   saveBuyerContactAction,
+  sendShopifyInvoiceAction,
   saveBuyerShippingProfileAction,
   setBuyerInvoiceStatusAction,
   setBuyerPaymentAction,
@@ -684,6 +685,25 @@ export default function BuyerCard({
                     Copy Shopify link
                   </button>
                 </div>
+                <button
+                  className={styles.primaryAction}
+                  type="button"
+                  onClick={() =>
+                    run(
+                      () =>
+                        sendShopifyInvoiceAction({
+                          auctionId,
+                          buyerId: buyer.id,
+                        }),
+                      'Shopify invoice emailed to the customer.',
+                    )
+                  }
+                  disabled={pending || !email.trim() || buyer.invoiceStatus === 'paid'}
+                >
+                  {buyer.invoiceStatus === 'sent' && buyer.invoiceMethod === 'shopify'
+                    ? 'Resend Shopify invoice email'
+                    : 'Send Shopify invoice email'}
+                </button>
               </>
             ) : (
               <>
@@ -829,12 +849,12 @@ export default function BuyerCard({
 
           <details className={styles.futureEmail}>
             <summary>
-              Future email / Shopify
+              Customer email
               {buyer.email ? <span className={styles.emailSavedBadge}>Email saved</span> : null}
             </summary>
             <div className={styles.futureEmailBody}>
               <p>
-                Optional for now. Save an email as you collect them so this buyer can use Shopify/email invoicing later.
+                Save the customer email here if you want Shopify to send the payment invoice directly.
               </p>
               <div className={styles.emailRow}>
                 <input
@@ -852,7 +872,7 @@ export default function BuyerCard({
                   onClick={() =>
                     run(
                       () => saveBuyerContactAction({ auctionId, buyerId: buyer.id, email }),
-                      'Email saved for future Shopify invoicing.',
+                      'Customer email saved.',
                     )
                   }
                   disabled={pending}
