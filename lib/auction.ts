@@ -73,6 +73,9 @@ export async function ensureAuctionSchema() {
           invoice_method text,
           shopify_draft_order_id text,
           invoice_sent_at timestamptz,
+          payment_method text,
+          payment_transaction_id text,
+          paid_cents integer,
           paid_at timestamptz,
           created_at timestamptz NOT NULL DEFAULT now(),
           updated_at timestamptz NOT NULL DEFAULT now()
@@ -85,6 +88,16 @@ export async function ensureAuctionSchema() {
       await db.execute(sql`
         CREATE INDEX IF NOT EXISTS auction_buyer_auction_updated_idx
         ON auction_buyer (auction_id, updated_at)
+      `)
+
+      await db.execute(sql`
+        ALTER TABLE auction_buyer ADD COLUMN IF NOT EXISTS payment_method text
+      `)
+      await db.execute(sql`
+        ALTER TABLE auction_buyer ADD COLUMN IF NOT EXISTS payment_transaction_id text
+      `)
+      await db.execute(sql`
+        ALTER TABLE auction_buyer ADD COLUMN IF NOT EXISTS paid_cents integer
       `)
 
       await db.execute(sql`
@@ -277,7 +290,7 @@ export async function getAuctionState(userId: string, requestedId?: number | nul
       buyerCount: buyerViews.length,
       packedCount: buyerViews.filter((buyer) => buyer.packageStatus === 'packed').length,
       invoicedCount: buyerViews.filter((buyer) => buyer.invoiceStatus === 'sent').length,
-      paidCount: buyerViews.filter((buyer) => buyer.invoiceStatus === 'paid').length,
+      paidCount: buyerViews.filter((buyer) => buyer.paidAt !== null).length,
     },
   }
 }
