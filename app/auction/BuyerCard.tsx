@@ -41,10 +41,12 @@ function dollars(cents: number | null) {
 
 export default function BuyerCard({
   auctionId,
+  auctionTitle,
   buyer,
   mode,
 }: {
   auctionId: number
+  auctionTitle: string
   buyer: Buyer
   mode: 'buyers' | 'pack' | 'invoice'
 }) {
@@ -55,7 +57,58 @@ export default function BuyerCard({
   const [packed, setPacked] = useState(buyer.packageStatus === 'packed')
   const [email, setEmail] = useState(buyer.email ?? '')
   const [message, setMessage] = useState('')
+  const [copyLabel, setCopyLabel] = useState('Copy invoice for Messenger')
   const [pending, startTransition] = useTransition()
+
+  async function copyInvoice() {
+    if (buyer.dueCents === null || buyer.shippingCents === null) {
+      setMessage('Enter shipping before copying the final invoice.')
+      return
+    }
+
+    const itemLines = buyer.items
+      .map((item) => '• ' + item.itemName + ' — ' + dollars(item.priceCents))
+      .join('\n')
+
+    const totals = [
+      'Merchandise: ' + dollars(buyer.subtotalCents),
+      buyer.discountCents > 0
+        ? 'Private Group discount (10%): -' + dollars(buyer.discountCents)
+        : null,
+      'Shipping: ' + dollars(buyer.shippingCents),
+      'Total: ' + dollars(buyer.dueCents),
+    ].filter(Boolean).join('\n')
+
+    const invoiceText = [
+      'Hi ' + buyer.displayName + '! Here is your invoice from The Crafty Brother.',
+      '',
+      auctionTitle,
+      '',
+      itemLines,
+      '',
+      totals,
+      '',
+      'Thank you for your purchase! 💛',
+    ].join('\n')
+
+    try {
+      await navigator.clipboard.writeText(invoiceText)
+    } catch {
+      const textarea = document.createElement('textarea')
+      textarea.value = invoiceText
+      textarea.style.position = 'fixed'
+      textarea.style.opacity = '0'
+      document.body.appendChild(textarea)
+      textarea.focus()
+      textarea.select()
+      document.execCommand('copy')
+      textarea.remove()
+    }
+
+    setCopyLabel('Copied — paste into Messenger')
+    setMessage('Invoice copied to your clipboard.')
+    window.setTimeout(() => setCopyLabel('Copy invoice for Messenger'), 2600)
+  }
 
   function run(action: () => Promise<unknown>, success: string) {
     setMessage('')
@@ -208,30 +261,14 @@ export default function BuyerCard({
             <div className={styles.dueLine}><span>Amount due</span><strong>{dollars(buyer.dueCents)}</strong></div>
           </div>
 
-          <div className={styles.emailRow}>
-            <input
-              className={styles.compactInput}
-              type="email"
-              inputMode="email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              placeholder="Customer email for Shopify"
-              disabled={pending}
-            />
-            <button
-              className={styles.smallButton}
-              type="button"
-              onClick={() =>
-                run(
-                  () => saveBuyerContactAction({ auctionId, buyerId: buyer.id, email }),
-                  'Email saved.',
-                )
-              }
-              disabled={pending}
-            >
-              Save
-            </button>
-          </div>
+          <button
+            className={styles.copyInvoiceButton}
+            type="button"
+            onClick={copyInvoice}
+            disabled={buyer.dueCents === null}
+          >
+            📋 {copyLabel}
+          </button>
 
           <div className={styles.invoiceActions}>
             <button
@@ -274,12 +311,41 @@ export default function BuyerCard({
             </button>
           </div>
 
-          <div className={styles.shopifyReadiness}>
-            <span className={buyer.email ? styles.readyDot : styles.waitDot} />
-            {buyer.email
-              ? 'Shopify-ready identity saved. Draft-order sending is the next integration step.'
-              : 'Add an email to make this buyer eligible for the Shopify invoice lane.'}
-          </div>
+          <details className={styles.futureEmail}>
+            <summary>
+              Future email / Shopify
+              {buyer.email ? <span className={styles.emailSavedBadge}>Email saved</span> : null}
+            </summary>
+            <div className={styles.futureEmailBody}>
+              <p>
+                Optional for now. Save an email as you collect them so this buyer can use Shopify/email invoicing later.
+              </p>
+              <div className={styles.emailRow}>
+                <input
+                  className={styles.compactInput}
+                  type="email"
+                  inputMode="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  placeholder="Customer email"
+                  disabled={pending}
+                />
+                <button
+                  className={styles.smallButton}
+                  type="button"
+                  onClick={() =>
+                    run(
+                      () => saveBuyerContactAction({ auctionId, buyerId: buyer.id, email }),
+                      'Email saved for future Shopify invoicing.',
+                    )
+                  }
+                  disabled={pending}
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          </details>
         </div>
       ) : null}
 
