@@ -32,6 +32,16 @@ type Buyer = {
   shopifyDraftOrderName: string | null
   shopifyInvoiceUrl: string | null
   shopifyDraftOrderTotalCents: number | null
+  shopifyOrderId: string | null
+  shopifyOrderName: string | null
+  shopifyFinancialStatus: string | null
+  shopifyFulfillmentOrderId: string | null
+  shopifyLabelPurchaseResultId: string | null
+  shopifyLabelUrl: string | null
+  shopifyTrackingNumber: string | null
+  shopifyTrackingUrl: string | null
+  shopifyCarrier: string | null
+  shopifyLabelPurchasedAt: Date | null
   packageWeightOunces: number | null
   packageLengthHundredths: number | null
   packageWidthHundredths: number | null
@@ -217,6 +227,24 @@ export default function BuyerCard({
       textarea.remove()
     }
     setMessage(success)
+  }
+
+  function syncShopifyOrder() {
+    setMessage('')
+    startTransition(() => {
+      void (async () => {
+        try {
+          const result = await syncShopifyOrderAction({
+            auctionId,
+            buyerId: buyer.id,
+          })
+          setMessage(result.message)
+          router.refresh()
+        } catch (error) {
+          setMessage(error instanceof Error ? error.message : 'Could not check Shopify payment.')
+        }
+      })()
+    })
   }
 
   function createShopifyInvoice() {
@@ -791,6 +819,22 @@ export default function BuyerCard({
                     ? 'Resend Shopify invoice email'
                     : 'Send Shopify invoice email'}
                 </button>
+                <button
+                  className={styles.secondaryAction}
+                  type="button"
+                  onClick={syncShopifyOrder}
+                  disabled={pending}
+                >
+                  Check Shopify payment
+                </button>
+                {buyer.shopifyOrderName ? (
+                  <div className={styles.shopifyOrderStatus}>
+                    <span>{buyer.shopifyOrderName}</span>
+                    <strong>
+                      {buyer.shopifyFinancialStatus || (buyer.paidAt ? 'PAID' : 'ORDER CREATED')}
+                    </strong>
+                  </div>
+                ) : null}
               </>
             ) : (
               <>
