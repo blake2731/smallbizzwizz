@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import {
   saveBuyerContactAction,
   setBuyerInvoiceStatusAction,
+  setBuyerPaymentAction,
   setBuyerPrivateGroupAction,
   setBuyerShippingAction,
 } from './actions'
@@ -25,11 +26,22 @@ type Buyer = {
   packageStatus: 'unpacked' | 'packed'
   invoiceStatus: 'not_ready' | 'ready' | 'sent' | 'paid'
   invoiceMethod: 'messenger' | 'shopify' | 'other' | null
+  paymentMethod: string | null
+  paidCents: number | null
+  paidAt: Date | null
   subtotalCents: number
   discountCents: number
   dueCents: number | null
   items: Item[]
 }
+
+const PAYMENT_METHODS = [
+  ['paypal', 'PayPal'],
+  ['venmo', 'Venmo'],
+  ['meta_pay', 'Meta Pay'],
+  ['shopify', 'Shopify'],
+  ['other', 'Other'],
+] as const
 
 function dollars(cents: number | null) {
   if (cents === null) return '—'
@@ -37,6 +49,10 @@ function dollars(cents: number | null) {
     style: 'currency',
     currency: 'USD',
   }).format(cents / 100)
+}
+
+function paymentMethodLabel(value: string | null) {
+  return PAYMENT_METHODS.find(([key]) => key === value)?.[1] ?? value ?? 'Unknown'
 }
 
 export default function BuyerCard({
@@ -56,6 +72,7 @@ export default function BuyerCard({
   )
   const [packed, setPacked] = useState(buyer.packageStatus === 'packed')
   const [email, setEmail] = useState(buyer.email ?? '')
+  const [paymentMethod, setPaymentMethod] = useState(buyer.paymentMethod ?? '')
   const [message, setMessage] = useState('')
   const [copyLabel, setCopyLabel] = useState('Copy invoice for Messenger')
   const [pending, startTransition] = useTransition()
@@ -67,28 +84,36 @@ export default function BuyerCard({
     }
 
     const itemLines = buyer.items
-      .map((item) => '• ' + item.itemName + ' — ' + dollars(item.priceCents))
+      .map((item, index) => (index + 1) + '. ' + item.itemName + ' — ' + dollars(item.priceCents))
       .join('\n')
 
     const totals = [
-      'Merchandise: ' + dollars(buyer.subtotalCents),
+      'Subtotal: ' + dollars(buyer.subtotalCents),
       buyer.discountCents > 0
         ? 'Private Group discount (10%): -' + dollars(buyer.discountCents)
         : null,
       'Shipping: ' + dollars(buyer.shippingCents),
-      'Total: ' + dollars(buyer.dueCents),
+      'TOTAL: ' + dollars(buyer.dueCents),
     ].filter(Boolean).join('\n')
 
     const invoiceText = [
-      'Hi ' + buyer.displayName + '! Here is your invoice from The Crafty Brother.',
+      'THE CRAFTY BROTHER',
+      'INVOICE',
       '',
-      auctionTitle,
+      'Sale: ' + auctionTitle,
+      'Bill to: ' + buyer.displayName,
       '',
       itemLines,
       '',
       totals,
       '',
-      'Thank you for your purchase! 💛',
+      'HOW TO PAY',
+      'PayPal: paypal.me/justincrouse2',
+      'Venmo: @Justin-Crouse-6',
+      '',
+      'Please send the exact total above and include your name in the payment note so we can match your payment.',
+      '',
+      'Thank you for your purchase.',
     ].join('\n')
 
     try {
@@ -137,8 +162,11 @@ export default function BuyerCard({
         <div className={styles.badgeRow}>
           {buyer.privateGroup ? <span className={styles.pgBadge}>PG −10%</span> : null}
           {buyer.packageStatus === 'packed' ? <span className={styles.goodBadge}>Packed</span> : null}
-          {buyer.invoiceStatus === 'paid' ? <span className={styles.goodBadge}>Paid</span> : null}
-          {buyer.invoiceStatus === 'sent' ? <span className={styles.infoBadge}>Invoice sent</span> : null}
+          {buyer.paidAt ? (
+            <span className={styles.goodBadge}>Paid · {paymentMethodLabel(buyer.paymentMethod)}</span>
+          ) : buyer.invoiceStatus === 'sent' ? (
+            <span className={styles.infoBadge}>Invoice sent</span>
+          ) : null}
         </div>
       </div>
 
@@ -256,7 +284,9 @@ export default function BuyerCard({
         <div className={styles.buyerControls}>
           <div className={styles.totalBreakdown}>
             <div><span>Merchandise</span><strong>{dollars(buyer.subtotalCents)}</strong></div>
-            <div><span>PG discount</span><strong>−{dollars(buyer.discountCents)}</strong></div>
+            {buyer.discountCents > 0 ? (
+              <div><span>PG discount</span><strong>−{dollars(buyer.discountCents)}</strong></div>
+            ) : null}
             <div><span>Shipping</span><strong>{dollars(buyer.shippingCents)}</strong></div>
             <div className={styles.dueLine}><span>Amount due</span><strong>{dollars(buyer.dueCents)}</strong></div>
           </div>
@@ -270,45 +300,86 @@ export default function BuyerCard({
             📋 {copyLabel}
           </button>
 
-          <div className={styles.invoiceActions}>
-            <button
-              className={styles.primaryAction}
-              type="button"
-              onClick={() =>
-                run(
-                  () =>
-                    setBuyerInvoiceStatusAction({
-                      auctionId,
-                      buyerId: buyer.id,
-                      status: 'sent',
-                      method: 'messenger',
-                    }),
-                  'Messenger invoice marked sent.',
-                )
-              }
-              disabled={pending || buyer.dueCents === null}
-            >
-              Mark Messenger sent
-            </button>
-            <button
-              className={styles.secondaryAction}
-              type="button"
-              onClick={() =>
-                run(
-                  () =>
-                    setBuyerInvoiceStatusAction({
-                      auctionId,
-                      buyerId: buyer.id,
-                      status: 'paid',
-                      method: buyer.invoiceMethod ?? 'messenger',
-                    }),
-                  'Marked paid.',
-                )
-              }
-              disabled={pending || buyer.dueCents === null}
-            >
-              Mark paid
-            </button>
+          <button
+            className={styles.secondaryAction}
+            type="button"
+            onClick={() =>
+              run(
+                () =>
+                  setBuyerInvoiceStatusAction({
+                    auctionId,
+                    buyerId: buyer.id,
+                    status: 'sent',
+                    method: 'messenger',
+                  }),
+                'Messenger invoice marked sent.',
+              )
+            }
+            disabled={pending || buyer.dueCents === null || Boolean(buyer.paidAt)}
+          >
+            Mark Messenger sent
+          </button>
+
+          <div className={styles.paymentPanel}>
+            <div className={styles.paymentPanelTitle}>
+              <span>Payment</span>
+              {buyer.paidAt ? <strong>PAID {dollars(buyer.paidCents)}</strong> : <strong>UNPAID</strong>}
+            </div>
+
+            {buyer.paidAt ? (
+              <div className={styles.paidSummary}>
+                <span>{paymentMethodLabel(buyer.paymentMethod)}</span>
+                <button
+                  className={styles.smallButton}
+                  type="button"
+                  onClick={() =>
+                    run(
+                      () => setBuyerPaymentAction({
+                        auctionId,
+                        buyerId: buyer.id,
+                        paid: false,
+                      }),
+                      'Payment status reset to unpaid.',
+                    )
+                  }
+                  disabled={pending}
+                >
+                  Undo paid
+                </button>
+              </div>
+            ) : (
+              <div className={styles.paymentEntry}>
+                <select
+                  className={styles.compactInput}
+                  value={paymentMethod}
+                  onChange={(event) => setPaymentMethod(event.target.value)}
+                  disabled={pending}
+                >
+                  <option value="">How did they pay?</option>
+                  {PAYMENT_METHODS.map(([key, label]) => (
+                    <option value={key} key={key}>{label}</option>
+                  ))}
+                </select>
+                <button
+                  className={styles.primaryAction}
+                  type="button"
+                  onClick={() =>
+                    run(
+                      () => setBuyerPaymentAction({
+                        auctionId,
+                        buyerId: buyer.id,
+                        paid: true,
+                        paymentMethod: paymentMethod as 'paypal' | 'venmo' | 'meta_pay' | 'shopify' | 'other',
+                      }),
+                      'Payment recorded.',
+                    )
+                  }
+                  disabled={pending || buyer.dueCents === null || !paymentMethod}
+                >
+                  Mark paid
+                </button>
+              </div>
+            )}
           </div>
 
           <details className={styles.futureEmail}>
