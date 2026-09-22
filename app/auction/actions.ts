@@ -1030,6 +1030,319 @@ export async function syncShopifyOrderAction(input: {
   }
 }
 
+type ShopifyShippingLabelPurchaseResponse = {
+  shippingLabelPurchase: {
+    shippingLabelPurchaseResult: {
+      id: string
+      status: string
+    } | null
+    userErrors: Array<{
+      field: string[] | null
+      code: string | null
+      message: string
+    }>
+  }
+}
+
+type ShopifyShippingLabelResultResponse = {
+  node:
+    | {
+        status: string
+        errors: Array<{
+          code: string | null
+          message: string
+        }>
+        shippingLabels: Array<{
+          id: string
+          cancellable: boolean
+          printed: boolean
+          trackingInfo: {
+            number: string | null
+            company: string | null
+            url: string | null
+          } | null
+          shippingDocuments: Array<{
+            documentType: string
+            format: string
+            url: string
+          }>
+        }>
+      }
+    | null
+}
+
+const SHOPIFY_SHIPPING_LABEL_PURCHASE = `
+  mutation AuctionShippingLabelPurchase($input: ShippingLabelPurchaseInput!) {
+    shippingLabelPurchase(shippingLabelPurchase: $input) {
+      shippingLabelPurchaseResult {
+        id
+        status
+      }
+      userErrors {
+        field
+        code
+        message
+      }
+    }
+  }
+`
+
+const SHOPIFY_SHIPPING_LABEL_RESULT = `
+  query AuctionShippingLabelResult($id: ID!) {
+    node(id: $id) {
+      ... on ShippingLabelPurchaseResult {
+        status
+        errors {
+          code
+          message
+        }
+        shippingLabels {
+          id
+          cancellable
+          printed
+          trackingInfo {
+            number
+            company
+            url
+          }
+          shippingDocuments {
+            documentType
+            format
+            url
+          }
+        }
+      }
+    }
+  }
+`
+
+async function readShopifyLabelResult(resultId: string) {
+  const data = await shopifyGraphql<ShopifyShippingLabelResultResponse>(
+    SHOPIFY_SHIPPING_LABEL_RESULT,
+    { id: resultId },
+  )
+
+  if (!data.node) {
+    throw new Error('Shopify could not find the shipping label purchase.')
+  }
+
+  if (data.node.status === 'PURCHASE_FAILED') {
+    const detail = data.node.errors.map((error) => error.message).filter(Boolean).join('; ')
+    throw new Error(detail || 'Shopify could not purchase the shipping label.')
+  }
+
+  const label = data.node.shippingLabels[0] ?? null
+  const document =
+    label?.shippingDocuments.find((item) => item.documentType === 'LABEL') ??
+    label?.shippingDocuments[0] ??
+    null
+
+  return {
+    status: data.node.status,
+    label,
+    document,
+  }
+}
+
+export async function purchaseShopifyLabelAction(input: {
+  auctionId: number
+  buyerId: number
+}) {
+  const userId = await currentUserId()
+  await requireAuction(userId, input.auctionId)
+
+  const [buyer] = await db
+    .select()
+    .from(auctionBuyer)
+    .where(and(eq(auctionBuyer.id, input.buyerId), eq(auctionBuyer.auctionId, input.auctionId)))
+    .limit(1)
+
+  if (!buyer) throw new Error('Buyer not found')
+
+  if (buyer.shopifyLabelUrl) {
+    return {
+      ok: true,
+      status: 'PURCHASED',
+      labelUrl: buyer.shopifyLabelUrl,
+      trackingNumber: buyer.shopifyTrackingNumber,
+      trackingUrl: buyer.shopifyTrackingUrl,
+      carrier: buyer.shopifyCarrier,
+      existing: true,
+    }
+  }
+
+  if (!buyer.shopifyOrderId || !buyer.shopifyFulfillmentOrderId) {
+    throw new Error('Check Shopify payment first so the fulfillment order is available.')
+  }
+
+  if (!buyer.paidAt || buyer.paymentMethod !== 'shopify') {
+    throw new Error('Shopify payment must be confirmed before buying the label.')
+  }
+
+  if (
+    !buyer.packageWeightOunces ||
+    !buyer.packageLengthHundredths ||
+    !buyer.packageWidthHundredths ||
+    !buyer.packageHeightHundredths
+  ) {
+    throw new Error('Save the package weight and all three dimensions first.')
+  }
+
+  let resultId = buyer.shopifyLabelPurchaseResultId
+
+  if (!resultId) {
+    const purchase = await shopifyGraphql<ShopifyShippingLabelPurchaseResponse>(
+      SHOPIFY_SHIPPING_LABEL_PURCHASE,
+      {
+        input: {
+          fulfillmentOrderId: buyer.shopifyFulfillmentOrderId,
+          shippingDatetime: new Date(Date.now() + 10 * 60 * 1000).toISOString(),
+          totalWeight: {
+            value: buyer.packageWeightOunces,
+            unit: 'OUNCES',
+          },
+          packageInfo: {
+            customPackage: {
+              weight: {
+                value: 0.1,
+                unit: 'OUNCES',
+              },
+              dimensions: {
+                length: buyer.packageLengthHundredths / 100,
+                width: buyer.packageWidthHundredths / 100,
+                height: buyer.packageHeightHundredths / 100,
+                unit: 'INCHES',
+              },
+              type: 'BOX',
+            },
+          },
+          notifyCustomer: false,
+        },
+      },
+    )
+
+    const result = purchase.shippingLabelPurchase
+    if (result.userErrors.length) {
+      throw new Error(result.userErrors.map((error) => error.message).join('; '))
+    }
+
+    if (!result.shippingLabelPurchaseResult?.id) {
+      throw new Error('Shopify did not start the shipping label purchase.')
+    }
+
+    resultId = result.shippingLabelPurchaseResult.id
+
+    await db
+      .update(auctionBuyer)
+      .set({
+        shopifyLabelPurchaseResultId: resultId,
+        updatedAt: new Date(),
+      })
+      .where(eq(auctionBuyer.id, buyer.id))
+  }
+
+  let checked = await readShopifyLabelResult(resultId)
+
+  for (let attempt = 0; attempt < 12 && checked.status === 'PENDING_PURCHASE'; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 1000))
+    checked = await readShopifyLabelResult(resultId)
+  }
+
+  if (checked.status !== 'PURCHASED' || !checked.label || !checked.document?.url) {
+    revalidatePath('/auction')
+    return {
+      ok: true,
+      status: checked.status,
+      labelUrl: null,
+      trackingNumber: null,
+      trackingUrl: null,
+      carrier: null,
+      existing: false,
+    }
+  }
+
+  const now = new Date()
+  await db
+    .update(auctionBuyer)
+    .set({
+      shopifyLabelUrl: checked.document.url,
+      shopifyTrackingNumber: checked.label.trackingInfo?.number ?? null,
+      shopifyTrackingUrl: checked.label.trackingInfo?.url ?? null,
+      shopifyCarrier: checked.label.trackingInfo?.company ?? null,
+      shopifyLabelPurchasedAt: now,
+      updatedAt: now,
+    })
+    .where(eq(auctionBuyer.id, buyer.id))
+
+  revalidatePath('/auction')
+
+  return {
+    ok: true,
+    status: 'PURCHASED',
+    labelUrl: checked.document.url,
+    trackingNumber: checked.label.trackingInfo?.number ?? null,
+    trackingUrl: checked.label.trackingInfo?.url ?? null,
+    carrier: checked.label.trackingInfo?.company ?? null,
+    existing: false,
+  }
+}
+
+export async function refreshShopifyLabelAction(input: {
+  auctionId: number
+  buyerId: number
+}) {
+  const userId = await currentUserId()
+  await requireAuction(userId, input.auctionId)
+
+  const [buyer] = await db
+    .select()
+    .from(auctionBuyer)
+    .where(and(eq(auctionBuyer.id, input.buyerId), eq(auctionBuyer.auctionId, input.auctionId)))
+    .limit(1)
+
+  if (!buyer) throw new Error('Buyer not found')
+  if (!buyer.shopifyLabelPurchaseResultId) {
+    throw new Error('No Shopify label purchase has been started.')
+  }
+
+  const checked = await readShopifyLabelResult(buyer.shopifyLabelPurchaseResultId)
+
+  if (checked.status !== 'PURCHASED' || !checked.label || !checked.document?.url) {
+    return {
+      ok: true,
+      status: checked.status,
+      labelUrl: null,
+      trackingNumber: null,
+      trackingUrl: null,
+      carrier: null,
+    }
+  }
+
+  const now = new Date()
+  await db
+    .update(auctionBuyer)
+    .set({
+      shopifyLabelUrl: checked.document.url,
+      shopifyTrackingNumber: checked.label.trackingInfo?.number ?? null,
+      shopifyTrackingUrl: checked.label.trackingInfo?.url ?? null,
+      shopifyCarrier: checked.label.trackingInfo?.company ?? null,
+      shopifyLabelPurchasedAt: buyer.shopifyLabelPurchasedAt ?? now,
+      updatedAt: now,
+    })
+    .where(eq(auctionBuyer.id, buyer.id))
+
+  revalidatePath('/auction')
+
+  return {
+    ok: true,
+    status: 'PURCHASED',
+    labelUrl: checked.document.url,
+    trackingNumber: checked.label.trackingInfo?.number ?? null,
+    trackingUrl: checked.label.trackingInfo?.url ?? null,
+    carrier: checked.label.trackingInfo?.company ?? null,
+  }
+}
+
 export async function sendShopifyInvoiceAction(input: {
   auctionId: number
   buyerId: number
