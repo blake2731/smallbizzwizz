@@ -67,6 +67,27 @@ export const auctionBuyer = pgTable(
   ],
 )
 
+export const auctionCustomerPreference = pgTable(
+  'auction_customer_preference',
+  {
+    id: serial('id').primaryKey(),
+    userId: text('user_id').notNull(),
+    normalizedName: text('normalized_name').notNull(),
+    displayName: text('display_name').notNull(),
+    preferredPaymentMethod: text('preferred_payment_method')
+      .$type<'venmo' | 'meta_pay'>()
+      .notNull(),
+    source: text('source')
+      .$type<'observed_payment' | 'manual'>()
+      .notNull()
+      .default('observed_payment'),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    uniqueIndex('auction_customer_preference_user_name_unique').on(t.userId, t.normalizedName),
+  ],
+)
+
 export const auctionItem = pgTable(
   'auction_item',
   {
@@ -92,4 +113,5 @@ export const auctionItem = pgTable(
 
 export type AuctionSession = typeof auctionSession.$inferSelect
 export type AuctionBuyer = typeof auctionBuyer.$inferSelect
+export type AuctionCustomerPreference = typeof auctionCustomerPreference.$inferSelect
 export type AuctionItem = typeof auctionItem.$inferSelect
