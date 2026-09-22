@@ -525,6 +525,158 @@ export async function setBuyerShippingAction(input: {
   return { ok: true }
 }
 
+type ShopifyShippingRatesResponse = {
+  draftOrderAvailableDeliveryOptions: {
+    availableShippingRates: Array<{
+      handle: string
+      title: string
+      code: string
+      source: string
+      price: {
+        amount: string
+        currencyCode: string
+      }
+    }>
+  }
+}
+
+const SHOPIFY_SHIPPING_RATES = `
+  query AuctionShippingRates($input: DraftOrderAvailableDeliveryOptionsInput!) {
+    draftOrderAvailableDeliveryOptions(input: $input) {
+      availableShippingRates {
+        handle
+        title
+        code
+        source
+        price {
+          amount
+          currencyCode
+        }
+      }
+    }
+  }
+`
+
+export async function getShopifyShippingRatesAction(input: {
+  auctionId: number
+  buyerId: number
+  weightPounds: string
+  weightOunces: string
+  address1: string
+  address2: string
+  city: string
+  state: string
+  postalCode: string
+  countryCode?: string
+}) {
+  const userId = await currentUserId()
+  await requireAuction(userId, input.auctionId)
+
+  const [buyer] = await db
+    .select()
+    .from(auctionBuyer)
+    .where(and(eq(auctionBuyer.id, input.buyerId), eq(auctionBuyer.auctionId, input.auctionId)))
+    .limit(1)
+
+  if (!buyer) throw new Error('Buyer not found')
+
+  const address1 = input.address1.trim()
+  const address2 = input.address2.trim()
+  const city = input.city.trim()
+  const state = input.state.trim().toUpperCase()
+  const postalCode = input.postalCode.trim()
+  const countryCode = (input.countryCode ?? 'US').trim().toUpperCase() || 'US'
+
+  if (!address1 || !city || !state || !postalCode) {
+    throw new Error('Enter the customer address, city, state, and ZIP first.')
+  }
+
+  const weightPounds = parseWholeNumber(input.weightPounds, 'Weight pounds')
+  const weightOunces = parseWholeNumber(input.weightOunces, 'Weight ounces')
+  if (weightOunces !== null && weightOunces > 15) {
+    throw new Error('Weight ounces must be between 0 and 15')
+  }
+
+  const totalWeightOunces = (weightPounds ?? 0) * 16 + (weightOunces ?? 0)
+  if (totalWeightOunces <= 0) {
+    throw new Error('Enter the package weight before getting shipping rates.')
+  }
+
+  const soldItems = await db
+    .select({ priceCents: auctionItem.priceCents })
+    .from(auctionItem)
+    .where(
+      and(
+        eq(auctionItem.auctionId, input.auctionId),
+        eq(auctionItem.buyerId, input.buyerId),
+        eq(auctionItem.status, 'sold'),
+      ),
+    )
+
+  if (!soldItems.length) throw new Error('This buyer has no sold items.')
+
+  const subtotalCents = soldItems.reduce((sum, item) => sum + item.priceCents, 0)
+  const merchandiseCents = buyer.privateGroup
+    ? subtotalCents - Math.round(subtotalCents * 0.1)
+    : subtotalCents
+  const { firstName, lastName } = splitCustomerName(buyer.displayName)
+
+  const data = await shopifyGraphql<ShopifyShippingRatesResponse>(
+    SHOPIFY_SHIPPING_RATES,
+    {
+      input: {
+        lineItems: [
+          {
+            title: 'Auction package',
+            quantity: 1,
+            originalUnitPriceWithCurrency: {
+              amount: (merchandiseCents / 100).toFixed(2),
+              currencyCode: 'USD',
+            },
+            requiresShipping: true,
+            taxable: false,
+            weight: {
+              value: totalWeightOunces,
+              unit: 'OUNCES',
+            },
+          },
+        ],
+        shippingAddress: {
+          firstName,
+          lastName,
+          address1,
+          address2: address2 || undefined,
+          city,
+          provinceCode: state,
+          zip: postalCode,
+          countryCode,
+        },
+      },
+    },
+  )
+
+  const rates = data.draftOrderAvailableDeliveryOptions.availableShippingRates
+    .map((rate) => {
+      const amount = Number(rate.price.amount)
+      return {
+        handle: rate.handle,
+        title: rate.title,
+        code: rate.code,
+        source: rate.source,
+        amountCents: Number.isFinite(amount) ? Math.round(amount * 100) : null,
+        currencyCode: rate.price.currencyCode,
+      }
+    })
+    .filter((rate) => rate.amountCents !== null)
+    .sort((a, b) => (a.amountCents ?? 0) - (b.amountCents ?? 0))
+
+  if (!rates.length) {
+    throw new Error('Shopify did not return a shipping rate for this package and address.')
+  }
+
+  return { ok: true, rates }
+}
+
 type ShopifyDraftOrderCreateResponse = {
   draftOrderCreate: {
     draftOrder: {
