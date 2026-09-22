@@ -1343,6 +1343,62 @@ export async function refreshShopifyLabelAction(input: {
   }
 }
 
+export async function prepareReadyShopifyInvoicesAction(input: {
+  auctionId: number
+}) {
+  const userId = await currentUserId()
+  await requireAuction(userId, input.auctionId)
+
+  const buyers = await db
+    .select({
+      id: auctionBuyer.id,
+      displayName: auctionBuyer.displayName,
+      invoiceStatus: auctionBuyer.invoiceStatus,
+      shopifyDraftOrderId: auctionBuyer.shopifyDraftOrderId,
+    })
+    .from(auctionBuyer)
+    .where(eq(auctionBuyer.auctionId, input.auctionId))
+
+  let created = 0
+  let existing = 0
+  let paid = 0
+  const blocked: Array<{ buyerId: number; name: string; reason: string }> = []
+
+  for (const buyer of buyers) {
+    if (buyer.invoiceStatus === 'paid') {
+      paid += 1
+      continue
+    }
+
+    try {
+      const result = await createShopifyDraftOrderAction({
+        auctionId: input.auctionId,
+        buyerId: buyer.id,
+      })
+
+      if (result.existing || buyer.shopifyDraftOrderId) existing += 1
+      else created += 1
+    } catch (error) {
+      blocked.push({
+        buyerId: buyer.id,
+        name: buyer.displayName,
+        reason: error instanceof Error ? error.message : 'Invoice is not ready.',
+      })
+    }
+  }
+
+  revalidatePath('/auction')
+
+  return {
+    ok: true,
+    created,
+    existing,
+    paid,
+    blocked,
+    total: buyers.length,
+  }
+}
+
 export async function sendShopifyInvoiceAction(input: {
   auctionId: number
   buyerId: number
