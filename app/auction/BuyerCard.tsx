@@ -9,6 +9,7 @@ import {
   refreshShopifyLabelAction,
   saveBuyerContactAction,
   sendShopifyInvoiceAction,
+  syncShopifyOrderAction,
   saveBuyerShippingProfileAction,
   setBuyerInvoiceStatusAction,
   setBuyerPaymentAction,
