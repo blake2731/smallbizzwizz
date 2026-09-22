@@ -1391,3 +1391,62 @@
     font-size: 14px;
   }
 }
+
+
+.paymentPanel {
+  display: grid;
+  gap: 9px;
+  border: 1px solid #293243;
+  border-radius: 13px;
+  background: #0a0f16;
+  padding: 12px;
+}
+
+.paymentPanelTitle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: #8c97aa;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.paymentPanelTitle strong {
+  color: #f1f4f9;
+}
+
+.paymentEntry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.paymentEntry .primaryAction {
+  min-width: 110px;
+}
+
+.paidSummary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-radius: 10px;
+  background: rgba(57, 214, 156, 0.08);
+  padding: 10px;
+  color: #6edfb3;
+  font-size: 12px;
+  font-weight: 850;
+}
+
+@media (max-width: 760px) {
+  .paymentEntry {
+    grid-template-columns: 1fr;
+  }
+
+  .paymentEntry .primaryAction {
+    min-height: 48px;
+  }
+}
