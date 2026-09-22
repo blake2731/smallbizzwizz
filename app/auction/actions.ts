@@ -20,6 +20,16 @@ type LiveItemInput = {
   price: string
 }
 
+type EditItemInput = {
+  auctionId: number
+  itemId: number
+  itemName: string
+  buyerName?: string
+  price: string
+  status: 'open' | 'sold' | 'unsold'
+  saleType: 'quick' | 'auction'
+}
+
 async function currentUserId() {
   await ensureAuctionSchema()
 
@@ -41,6 +51,24 @@ async function requireAuction(userId: string, auctionId: number) {
 
   if (!auction) throw new Error('Auction not found')
   return auction
+}
+
+async function requireItem(auctionId: number, itemId: number) {
+  const [item] = await db
+    .select()
+    .from(auctionItem)
+    .where(and(eq(auctionItem.id, itemId), eq(auctionItem.auctionId, auctionId)))
+    .limit(1)
+
+  if (!item || item.status === 'void') throw new Error('Item not found')
+  return item
+}
+
+async function touchAuction(auctionId: number) {
+  await db
+    .update(auctionSession)
+    .set({ updatedAt: new Date() })
+    .where(eq(auctionSession.id, auctionId))
 }
 
 async function getOrCreateBuyer(auctionId: number, rawName: string) {
@@ -88,6 +116,25 @@ async function getOrCreateBuyer(auctionId: number, rawName: string) {
   return created
 }
 
+async function cleanupBuyerIfUnused(buyerId: number | null) {
+  if (!buyerId) return
+
+  const remaining = await db
+    .select({ id: auctionItem.id })
+    .from(auctionItem)
+    .where(
+      and(
+        eq(auctionItem.buyerId, buyerId),
+        ne(auctionItem.status, 'void'),
+      ),
+    )
+    .limit(1)
+
+  if (!remaining.length) {
+    await db.delete(auctionBuyer).where(eq(auctionBuyer.id, buyerId))
+  }
+}
+
 async function insertSoldItem(input: LiveItemInput) {
   const itemName = input.itemName.trim()
   const buyerName = input.buyerName?.trim() ?? ''
@@ -102,6 +149,7 @@ async function insertSoldItem(input: LiveItemInput) {
     buyerId: buyer.id,
     itemName,
     priceCents,
+    saleType: 'quick',
     status: 'sold',
   })
 }
@@ -117,6 +165,7 @@ async function insertUnsoldItem(input: LiveItemInput) {
     buyerId: null,
     itemName,
     priceCents,
+    saleType: 'quick',
     status: 'unsold',
   })
 }
@@ -142,10 +191,7 @@ export async function recordSaleAction(input: LiveItemInput) {
   const userId = await currentUserId()
   await requireAuction(userId, input.auctionId)
   await insertSoldItem(input)
-  await db
-    .update(auctionSession)
-    .set({ updatedAt: new Date() })
-    .where(eq(auctionSession.id, input.auctionId))
+  await touchAuction(input.auctionId)
   revalidatePath('/auction')
   return { ok: true }
 }
@@ -154,10 +200,165 @@ export async function recordUnsoldAction(input: LiveItemInput) {
   const userId = await currentUserId()
   await requireAuction(userId, input.auctionId)
   await insertUnsoldItem(input)
+  await touchAuction(input.auctionId)
+  revalidatePath('/auction')
+  return { ok: true }
+}
+
+export async function startAuctionLotAction(input: {
+  auctionId: number
+  itemName: string
+  startingPrice: string
+}) {
+  const userId = await currentUserId()
+  await requireAuction(userId, input.auctionId)
+
+  const [open] = await db
+    .select({ id: auctionItem.id })
+    .from(auctionItem)
+    .where(and(eq(auctionItem.auctionId, input.auctionId), eq(auctionItem.status, 'open')))
+    .limit(1)
+
+  if (open) throw new Error('Close the current auction lot before starting another.')
+
+  const itemName = input.itemName.trim()
+  if (!itemName) throw new Error('Item is required')
+
+  const startingPrice = input.startingPrice.trim()
+  const priceCents = startingPrice ? parseMoneyToCents(startingPrice) : 0
+  if (priceCents === null) throw new Error('Enter a valid starting price')
+
+  await db.insert(auctionItem).values({
+    auctionId: input.auctionId,
+    buyerId: null,
+    itemName,
+    priceCents,
+    saleType: 'auction',
+    status: 'open',
+  })
+
+  await touchAuction(input.auctionId)
+  revalidatePath('/auction')
+  return { ok: true }
+}
+
+export async function updateAuctionHighBidAction(input: {
+  auctionId: number
+  itemId: number
+  buyerName: string
+  bid: string
+}) {
+  const userId = await currentUserId()
+  await requireAuction(userId, input.auctionId)
+  const item = await requireItem(input.auctionId, input.itemId)
+
+  if (item.saleType !== 'auction' || item.status !== 'open') {
+    throw new Error('This lot is no longer open for bidding.')
+  }
+
+  const bidCents = parseMoneyToCents(input.bid)
+  if (bidCents === null) throw new Error('Enter a valid bid')
+  if (bidCents <= item.priceCents) {
+    throw new Error('New high bid must be higher than the current amount. Use Edit for corrections.')
+  }
+
+  const buyer = await getOrCreateBuyer(input.auctionId, input.buyerName)
+  const previousBuyerId = item.buyerId
+
   await db
-    .update(auctionSession)
-    .set({ updatedAt: new Date() })
-    .where(eq(auctionSession.id, input.auctionId))
+    .update(auctionItem)
+    .set({
+      buyerId: buyer.id,
+      priceCents: bidCents,
+      lastBidAt: new Date(),
+    })
+    .where(eq(auctionItem.id, item.id))
+
+  if (previousBuyerId && previousBuyerId !== buyer.id) {
+    await cleanupBuyerIfUnused(previousBuyerId)
+  }
+
+  await touchAuction(input.auctionId)
+  revalidatePath('/auction')
+  return { ok: true }
+}
+
+export async function closeAuctionLotAction(input: {
+  auctionId: number
+  itemId: number
+  result: 'sold' | 'unsold'
+}) {
+  const userId = await currentUserId()
+  await requireAuction(userId, input.auctionId)
+  const item = await requireItem(input.auctionId, input.itemId)
+
+  if (item.saleType !== 'auction' || item.status !== 'open') {
+    throw new Error('This lot is already closed.')
+  }
+
+  if (input.result === 'sold' && !item.buyerId) {
+    throw new Error('There is no high bidder yet.')
+  }
+
+  const previousBuyerId = item.buyerId
+  await db
+    .update(auctionItem)
+    .set({
+      status: input.result,
+      buyerId: input.result === 'sold' ? item.buyerId : null,
+    })
+    .where(eq(auctionItem.id, item.id))
+
+  if (input.result === 'unsold') {
+    await cleanupBuyerIfUnused(previousBuyerId)
+  }
+
+  await touchAuction(input.auctionId)
+  revalidatePath('/auction')
+  return { ok: true }
+}
+
+export async function editItemAction(input: EditItemInput) {
+  const userId = await currentUserId()
+  await requireAuction(userId, input.auctionId)
+  const item = await requireItem(input.auctionId, input.itemId)
+
+  const itemName = input.itemName.trim()
+  const priceCents = parseMoneyToCents(input.price)
+  if (!itemName) throw new Error('Item is required')
+  if (priceCents === null) throw new Error('Enter a valid price')
+  if (input.status === 'open' && input.saleType !== 'auction') {
+    throw new Error('Only auction lots can be open.')
+  }
+
+  let buyerId: number | null = null
+  if (input.status === 'sold' || (input.status === 'open' && input.buyerName?.trim())) {
+    const buyerName = input.buyerName?.trim() ?? ''
+    if (!buyerName && input.status === 'sold') throw new Error('Sold items need a buyer.')
+    if (buyerName) {
+      const buyer = await getOrCreateBuyer(input.auctionId, buyerName)
+      buyerId = buyer.id
+    }
+  }
+
+  const previousBuyerId = item.buyerId
+  await db
+    .update(auctionItem)
+    .set({
+      itemName,
+      priceCents,
+      saleType: input.saleType,
+      status: input.status,
+      buyerId: input.status === 'unsold' ? null : buyerId,
+      lastBidAt: input.status === 'open' ? new Date() : item.lastBidAt,
+    })
+    .where(eq(auctionItem.id, item.id))
+
+  if (previousBuyerId && previousBuyerId !== buyerId) {
+    await cleanupBuyerIfUnused(previousBuyerId)
+  }
+
+  await touchAuction(input.auctionId)
   revalidatePath('/auction')
   return { ok: true }
 }
@@ -180,31 +381,11 @@ export async function undoLastItemAction(auctionId: number) {
     .set({ status: 'void', voidedAt: new Date() })
     .where(eq(auctionItem.id, last.id))
 
-  if (last.buyerId) {
-    const remaining = await db
-      .select({ id: auctionItem.id })
-      .from(auctionItem)
-      .where(
-        and(
-          eq(auctionItem.buyerId, last.buyerId),
-          eq(auctionItem.status, 'sold'),
-          ne(auctionItem.id, last.id),
-        ),
-      )
-      .limit(1)
-
-    if (!remaining.length) {
-      await db.delete(auctionBuyer).where(eq(auctionBuyer.id, last.buyerId))
-    }
-  }
-
-  await db
-    .update(auctionSession)
-    .set({ updatedAt: new Date() })
-    .where(eq(auctionSession.id, auctionId))
+  await cleanupBuyerIfUnused(last.buyerId)
+  await touchAuction(auctionId)
 
   revalidatePath('/auction')
-  return { ok: true, message: `Undid “${last.itemName}”.` }
+  return { ok: true, message: 'Undid “' + last.itemName + '”.' }
 }
 
 export async function setBuyerPrivateGroupAction(input: {
@@ -358,10 +539,7 @@ export async function importRowsAction(formData: FormData) {
   }
 
   if (imported) {
-    await db
-      .update(auctionSession)
-      .set({ updatedAt: new Date() })
-      .where(eq(auctionSession.id, auctionId))
+    await touchAuction(auctionId)
   }
 
   revalidatePath('/auction')
