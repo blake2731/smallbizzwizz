@@ -330,3 +330,18 @@
     justify-self: start;
   }
 }
+
+
+.packageGroup + .packageGroup {
+  margin-top: 3px;
+}
+
+.packageGroupTitle {
+  border-top: 1px solid #bbb;
+  margin-top: 2px;
+  padding-top: 2px;
+  font-size: 5.9pt;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
