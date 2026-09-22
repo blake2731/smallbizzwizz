@@ -10,6 +10,7 @@ import LiveEntry from './LiveEntry'
 import BuyerCard from './BuyerCard'
 import ActivityItem from './ActivityItem'
 import { getAuctionList, getAuctionState, money } from '@/lib/auction'
+import { ensureLatestAuctionPreview } from '@/lib/auction-preview-seed'
 import styles from './auction.module.css'
 
 export const metadata: Metadata = {
@@ -74,12 +75,15 @@ export default async function AuctionPage({
   const viewParam = Array.isArray(params.view) ? params.view[0] : params.view
   const view = VIEWS.some(([key]) => key === viewParam) ? viewParam! : 'live'
 
+  const seededAuctionId = await ensureLatestAuctionPreview(userId)
+  const selectedAuctionId =
+    requestedAuctionId && Number.isFinite(requestedAuctionId)
+      ? requestedAuctionId
+      : seededAuctionId
+
   const [auctions, state] = await Promise.all([
     getAuctionList(userId),
-    getAuctionState(
-      userId,
-      requestedAuctionId && Number.isFinite(requestedAuctionId) ? requestedAuctionId : null,
-    ),
+    getAuctionState(userId, selectedAuctionId),
   ])
 
   if (!state) {
