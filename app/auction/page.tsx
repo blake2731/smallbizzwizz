@@ -8,6 +8,7 @@ import {
 } from './actions'
 import LiveEntry from './LiveEntry'
 import BuyerCard from './BuyerCard'
+import InvoiceBatchPanel from './InvoiceBatchPanel'
 import ActivityItem from './ActivityItem'
 import { getAuctionList, getAuctionState, money } from '@/lib/auction'
 import { ensureLatestAuctionPreview } from '@/lib/auction-preview-seed'
@@ -135,6 +136,16 @@ export default async function AuctionPage({
     if (aReady !== bReady) return aReady - bReady
     return a.displayName.localeCompare(b.displayName)
   })
+
+  const invoicePreparedCount = buyers.filter((buyer) => Boolean(buyer.shopifyDraftOrderId)).length
+  const invoiceSentCount = buyers.filter(
+    (buyer) => buyer.invoiceStatus === 'sent' || buyer.invoiceStatus === 'paid',
+  ).length
+  const invoiceMissingShippingCount = buyers.filter((buyer) => buyer.shippingCents === null).length
+  const invoiceMissingAddressCount = buyers.filter((buyer) => {
+    const profile = buyer.shippingProfile
+    return !profile?.address1 || !profile.city || !profile.state || !profile.postalCode
+  }).length
 
   return (
     <main className={styles.shell}>
@@ -353,6 +364,15 @@ export default async function AuctionPage({
                 {metrics.invoicedCount} sent · {metrics.paidCount} paid
               </div>
             </div>
+            <InvoiceBatchPanel
+              auctionId={auction.id}
+              total={buyers.length}
+              prepared={invoicePreparedCount}
+              sent={invoiceSentCount}
+              paid={metrics.paidCount}
+              missingShipping={invoiceMissingShippingCount}
+              missingAddress={invoiceMissingAddressCount}
+            />
             <div className={styles.cardGrid}>
               {invoiceBuyers.map((buyer) => (
                 <BuyerCard key={buyer.id} auctionId={auction.id} auctionTitle={auction.title} buyer={buyer} mode="invoice" />
