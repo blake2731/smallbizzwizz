@@ -85,12 +85,7 @@ export default function ActivityItem({
       <div className={styles.activityRow}>
         <div className={dotClass} />
         <div className={styles.activityMain}>
-          <div className={styles.activityTitleLine}>
-            <strong>{item.itemName}</strong>
-            <span className={item.saleType === 'auction' ? styles.auctionTag : styles.quickTag}>
-              {item.saleType === 'auction' ? 'Auction' : 'Quick'}
-            </span>
-          </div>
+          <strong>{item.itemName}</strong>
           <span>
             {item.status === 'open'
               ? (item.buyerName ? 'High: ' + item.buyerName : 'Open · no bidder')
@@ -123,7 +118,7 @@ export default function ActivityItem({
             </label>
 
             <label className={styles.fieldGroup}>
-              <span>Price / high bid</span>
+              <span>Price</span>
               <div className={styles.moneyInputWrapSmall}>
                 <span className={styles.currency}>$</span>
                 <input
@@ -137,35 +132,16 @@ export default function ActivityItem({
             </label>
           </div>
 
-          <div className={styles.editGrid}>
-            <label className={styles.fieldGroup}>
-              <span>Buyer {status === 'unsold' ? '(not needed)' : ''}</span>
-              <input
-                className={styles.compactInput}
-                value={buyerName}
-                onChange={(event) => setBuyerName(event.target.value)}
-                placeholder="Buyer name"
-                disabled={pending || status === 'unsold'}
-              />
-            </label>
-
-            <label className={styles.fieldGroup}>
-              <span>Type</span>
-              <select
-                className={styles.compactInput}
-                value={saleType}
-                onChange={(event) => {
-                  const next = event.target.value as 'quick' | 'auction' | 'legacy'
-                  setSaleType(next)
-                  if (next === 'quick' && status === 'open') setStatus('unsold')
-                }}
-                disabled={pending}
-              >
-                <option value="quick">Quick Sale</option>
-                <option value="auction">Auction</option>\n                <option value="legacy">Imported / unknown</option>
-              </select>
-            </label>
-          </div>
+          <label className={styles.fieldGroup}>
+            <span>Buyer {status === 'unsold' ? '(not needed)' : ''}</span>
+            <input
+              className={styles.compactInput}
+              value={buyerName}
+              onChange={(event) => setBuyerName(event.target.value)}
+              placeholder="Buyer name"
+              disabled={pending || status === 'unsold'}
+            />
+          </label>
 
           <div className={styles.statusPicker}>
             <button
