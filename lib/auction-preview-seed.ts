@@ -1,10 +1,11 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, ne } from 'drizzle-orm'
 import { db } from '@/lib/db'
-import { auctionBuyer, auctionItem, auctionSession } from '@/lib/auction-schema'
+import { auctionBuyer, auctionCustomerPreference, auctionItem, auctionSession } from '@/lib/auction-schema'
 import { ensureAuctionSchema, normalizeBuyerName } from '@/lib/auction'
 
 const PREVIEW_OWNER = 'auction-preview-owner'
 const TITLE = 'September 21, 2026 Auction'
+const CLEAN_BASELINE_CUTOFF = new Date('2026-09-22T06:26:00Z')
 
 const rows = [
   ['Green Purse', '', 500],
@@ -53,12 +54,17 @@ export async function ensureLatestAuctionPreview(userId: string) {
   await ensureAuctionSchema()
 
   const [existing] = await db
-    .select({ id: auctionSession.id })
+    .select({ id: auctionSession.id, updatedAt: auctionSession.updatedAt })
     .from(auctionSession)
     .where(and(eq(auctionSession.userId, PREVIEW_OWNER), eq(auctionSession.title, TITLE)))
     .limit(1)
 
-  if (existing) return existing.id
+  if (existing) {
+    if (existing.updatedAt < CLEAN_BASELINE_CUTOFF) {
+      return resetLatestAuctionPreview(userId)
+    }
+    return existing.id
+  }
 
   const [auction] = await db
     .insert(auctionSession)
@@ -122,6 +128,12 @@ export async function resetLatestAuctionPreview(userId: string) {
 
   await db.delete(auctionItem).where(eq(auctionItem.auctionId, auctionId))
   await db.delete(auctionBuyer).where(eq(auctionBuyer.auctionId, auctionId))
+  await db
+    .delete(auctionCustomerPreference)
+    .where(eq(auctionCustomerPreference.userId, PREVIEW_OWNER))
+  await db
+    .delete(auctionSession)
+    .where(and(eq(auctionSession.userId, PREVIEW_OWNER), ne(auctionSession.id, auctionId)))
 
   await db
     .update(auctionSession)
