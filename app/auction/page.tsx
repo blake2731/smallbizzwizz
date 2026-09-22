@@ -61,7 +61,10 @@ export default async function AuctionPage({
 }: {
   searchParams: Promise<{ auction?: string | string[]; view?: string | string[] }>
 }) {
-  const { userId } = await auth()
+  const userId = process.env.VERCEL_ENV === 'preview'
+    ? 'auction-preview-owner'
+    : (await auth()).userId
+
   if (!userId) redirect('/sign-in')
 
   const params = await searchParams
