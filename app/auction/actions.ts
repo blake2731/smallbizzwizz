@@ -5,7 +5,7 @@ import { and, desc, eq, ne } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { db } from '@/lib/db'
-import { auctionBuyer, auctionItem, auctionSession } from '@/lib/auction-schema'
+import { auctionBuyer, auctionCustomerPreference, auctionItem, auctionSession } from '@/lib/auction-schema'
 import {
   displayBuyerName,
   ensureAuctionSchema,
@@ -540,6 +540,31 @@ export async function setBuyerPaymentAction(input: {
       updatedAt: now,
     })
     .where(eq(auctionBuyer.id, input.buyerId))
+
+  if (input.paymentMethod === 'venmo' || input.paymentMethod === 'meta_pay') {
+    await db
+      .insert(auctionCustomerPreference)
+      .values({
+        userId,
+        normalizedName: buyer.normalizedName,
+        displayName: buyer.displayName,
+        preferredPaymentMethod: input.paymentMethod,
+        source: 'observed_payment',
+        updatedAt: now,
+      })
+      .onConflictDoUpdate({
+        target: [
+          auctionCustomerPreference.userId,
+          auctionCustomerPreference.normalizedName,
+        ],
+        set: {
+          displayName: buyer.displayName,
+          preferredPaymentMethod: input.paymentMethod,
+          source: 'observed_payment',
+          updatedAt: now,
+        },
+      })
+  }
 
   revalidatePath('/auction')
   return { ok: true }
