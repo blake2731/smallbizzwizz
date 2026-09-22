@@ -31,6 +31,21 @@ function groupItems(items: Array<{ itemName: string; priceCents: number }>) {
   return [...groups.values()]
 }
 
+function packageGroups(buyer: PackingBuyer) {
+  const packages = [...buyer.packages].sort((a, b) => a.packageNumber - b.packageNumber)
+  if (!packages.length) {
+    return [{ id: 0, packageNumber: 1, items: buyer.items }]
+  }
+
+  return packages.map((pkg, index) => ({
+    id: pkg.id,
+    packageNumber: pkg.packageNumber,
+    items: buyer.items.filter(
+      (item) => item.packageId === pkg.id || (item.packageId === null && index === 0),
+    ),
+  }))
+}
+
 function pageWeight(buyer: PackingBuyer) {
   return 1.35 + groupItems(buyer.items).length
 }
@@ -124,8 +139,7 @@ export default async function PackingListPage({
 
               <div className={styles.columns + ' ' + columnClass}>
                 {pageBuyers.map((buyer) => {
-                  const grouped = groupItems(buyer.items)
-                  return (
+                   return (
                     <article className={styles.buyerBlock} key={buyer.id}>
                       <div className={styles.buyerHeader}>
                         <div className={styles.packBox}>□</div>
@@ -133,27 +147,40 @@ export default async function PackingListPage({
                           <strong>{buyer.displayName}</strong>
                           <span>
                             {buyer.items.length} {buyer.items.length === 1 ? 'item' : 'items'}
+                            {buyer.packages.length > 1 ? ' · ' + buyer.packages.length + ' packages' : ''}
                             {buyer.privateGroup ? ' · PG' : ''}
                           </span>
                         </div>
                         <div className={styles.buyerTotal}>{money(buyer.subtotalCents)}</div>
                       </div>
 
-                      <ul className={styles.items}>
-                        {grouped.map((item) => (
-                          <li key={item.name + '-' + item.priceCents}>
-                            <span className={styles.itemBox}>□</span>
-                            <span className={styles.itemName}>{item.name}</span>
-                            {item.quantity > 1 ? (
-                              <span className={styles.quantity}>×{item.quantity}</span>
+                      {packageGroups(buyer).map((pkg) => {
+                        const packageItems = groupItems(pkg.items)
+                        return (
+                          <div className={styles.packageGroup} key={pkg.id || pkg.packageNumber}>
+                            {buyer.packages.length > 1 ? (
+                              <div className={styles.packageGroupTitle}>
+                                □ Package {pkg.packageNumber}
+                              </div>
                             ) : null}
-                            <strong className={styles.itemPrice}>
-                              {money(item.priceCents)}
-                              {item.quantity > 1 ? ' ea' : ''}
-                            </strong>
-                          </li>
-                        ))}
-                      </ul>
+                            <ul className={styles.items}>
+                              {packageItems.map((item) => (
+                                <li key={pkg.packageNumber + '-' + item.name + '-' + item.priceCents}>
+                                  <span className={styles.itemBox}>□</span>
+                                  <span className={styles.itemName}>{item.name}</span>
+                                  {item.quantity > 1 ? (
+                                    <span className={styles.quantity}>×{item.quantity}</span>
+                                  ) : null}
+                                  <strong className={styles.itemPrice}>
+                                    {money(item.priceCents)}
+                                    {item.quantity > 1 ? ' ea' : ''}
+                                  </strong>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )
+                      })}
                     </article>
                   )
                 })}
