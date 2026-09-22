@@ -101,6 +101,8 @@ export const auctionItem = pgTable(
     saleType: text('sale_type').$type<'quick' | 'auction' | 'legacy'>().notNull().default('quick'),
     status: text('status').$type<'open' | 'sold' | 'unsold' | 'void'>().notNull(),
     lastBidAt: timestamp('last_bid_at', { withTimezone: true }),
+    backupBidderName: text('backup_bidder_name'),
+    backupBidCents: integer('backup_bid_cents'),
     voidedAt: timestamp('voided_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   },
