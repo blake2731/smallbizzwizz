@@ -46,7 +46,6 @@ export default function ActivityItem({
   const [status, setStatus] = useState<'open' | 'sold' | 'unsold'>(
     item.status === 'void' ? 'unsold' : item.status,
   )
-  const [saleType, setSaleType] = useState<'quick' | 'auction' | 'legacy'>(item.saleType)
   const [message, setMessage] = useState('')
   const [pending, startTransition] = useTransition()
 
@@ -62,7 +61,7 @@ export default function ActivityItem({
             buyerName,
             price,
             status,
-            saleType,
+            saleType: item.saleType,
           })
           setEditing(false)
           setMessage('Saved')
@@ -186,7 +185,7 @@ export default function ActivityItem({
             >
               Unsold
             </button>
-            {saleType === 'auction' ? (
+            {item.saleType === 'auction' ? (
               <button
                 type="button"
                 className={status === 'open' ? styles.statusActive : styles.statusChoice}
