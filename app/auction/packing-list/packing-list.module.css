@@ -101,8 +101,19 @@
 }
 
 .columns {
+  column-gap: 0.12in;
+}
+
+.densityThree {
   columns: 3;
-  column-gap: 0.18in;
+}
+
+.densityFour {
+  columns: 4;
+}
+
+.densityFive {
+  columns: 5;
 }
 
 .buyerBlock {
@@ -110,22 +121,22 @@
   display: inline-block;
   width: 100%;
   border: 1px solid #222;
-  margin: 0 0 0.10in;
-  padding: 0.07in 0.08in;
+  margin: 0 0 0.055in;
+  padding: 0.045in 0.055in;
 }
 
 .buyerHeader {
   display: grid;
   grid-template-columns: auto 1fr auto;
-  gap: 6px;
+  gap: 4px;
   align-items: center;
-  border-bottom: 1px solid #888;
-  padding-bottom: 3px;
-  margin-bottom: 3px;
+  border-bottom: 1px solid #aaa;
+  padding-bottom: 2px;
+  margin-bottom: 2px;
 }
 
 .packBox {
-  font-size: 13pt;
+  font-size: 11pt;
   line-height: 1;
 }
 
@@ -135,21 +146,21 @@
 }
 
 .buyerIdentity strong {
-  font-size: 8.5pt;
-  line-height: 1.05;
+  font-size: 7.8pt;
+  line-height: 1.02;
 }
 
 .buyerIdentity span {
-  margin-top: 1px;
-  font-size: 6pt;
+  margin-top: 0;
+  font-size: 5.5pt;
   color: #444;
   font-weight: 700;
 }
 
-.packedLabel {
-  font-size: 5.5pt;
+.buyerTotal {
+  font-size: 7.2pt;
   font-weight: 900;
-  letter-spacing: .08em;
+  white-space: nowrap;
 }
 
 .items {
@@ -162,42 +173,28 @@
   display: grid;
   grid-template-columns: auto 1fr auto;
   align-items: baseline;
-  gap: 4px;
-  padding: 1px 0;
-  font-size: 7pt;
-  line-height: 1.1;
+  gap: 3px;
+  padding: 0;
+  font-size: 6.5pt;
+  line-height: 1.05;
 }
 
 .itemBox {
-  font-size: 8.5pt;
+  font-size: 7.5pt;
 }
 
 .items strong {
-  font-size: 6.8pt;
-}
-
-.footerLine {
-  display: grid;
-  grid-template-columns: auto 1fr;
-  gap: 8px;
-  border-top: 1px solid #bbb;
-  margin-top: 3px;
-  padding-top: 3px;
-  font-size: 6pt;
-}
-
-.notes {
-  text-align: right;
+  font-size: 6.2pt;
 }
 
 .sheetFooter {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 20px;
   border-top: 2px solid #111;
-  margin-top: 2px;
-  padding-top: 5px;
-  font-size: 6.5pt;
+  margin-top: 3px;
+  padding-top: 4px;
+  font-size: 6pt;
   font-weight: 900;
 }
 
@@ -226,12 +223,42 @@
   }
 
   .columns {
+    column-gap: 0.10in;
+  }
+
+  .densityThree {
     columns: 3;
-    column-gap: 0.16in;
+  }
+
+  .densityFour {
+    columns: 4;
+  }
+
+  .densityFive {
+    columns: 5;
   }
 
   .buyerBlock {
-    margin-bottom: 0.07in;
+    margin-bottom: 0.045in;
+  }
+
+  .densityFour .buyerIdentity strong {
+    font-size: 7.1pt;
+  }
+
+  .densityFour .items li,
+  .densityFour .buyerTotal {
+    font-size: 5.9pt;
+  }
+
+  .densityFive .buyerIdentity strong {
+    font-size: 6.4pt;
+  }
+
+  .densityFive .buyerIdentity span,
+  .densityFive .items li,
+  .densityFive .buyerTotal {
+    font-size: 5.2pt;
   }
 }
 
