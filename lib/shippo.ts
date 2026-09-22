@@ -97,6 +97,29 @@ export async function resolveShippoOriginAddressId() {
     return domestic[0].id
   }
 
+  const uniquePhysicalAddresses = new Map<string, ShippoAddressBookEntry>()
+  for (const entry of domestic) {
+    const address = entry.address
+    const key = [
+      address.address_line_1,
+      address.address_line_2,
+      address.city_locality,
+      address.state_province,
+      address.postal_code,
+      address.country_code,
+    ]
+      .map((value) => (value ?? '').trim().toLowerCase().replace(/\s+/g, ' '))
+      .join('|')
+
+    if (!uniquePhysicalAddresses.has(key)) {
+      uniquePhysicalAddresses.set(key, entry)
+    }
+  }
+
+  if (uniquePhysicalAddresses.size === 1) {
+    return [...uniquePhysicalAddresses.values()][0].id
+  }
+
   const likely = domestic.filter((entry) => {
     const haystack = [
       entry.address.organization,
