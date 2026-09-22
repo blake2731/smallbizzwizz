@@ -51,7 +51,27 @@ export async function GET(request: Request) {
     'Note',
   ]
 
-  const rows = state.buyers.map((buyer) => {
+  const readyBuyers = state.buyers.filter((buyer) => {
+    const profile = buyer.shippingProfile
+    return (
+      buyer.packageStatus === 'packed' &&
+      Boolean(profile?.address1 && profile.city && profile.state && profile.postalCode) &&
+      buyer.packageWeightOunces !== null &&
+      buyer.packageWeightOunces > 0 &&
+      buyer.packageLengthHundredths !== null &&
+      buyer.packageWidthHundredths !== null &&
+      buyer.packageHeightHundredths !== null
+    )
+  })
+
+  if (!readyBuyers.length) {
+    return new Response(
+      'No packages are ready to export. Save the customer address, weight, dimensions, and mark the package packed first.',
+      { status: 400, headers: { 'Content-Type': 'text/plain; charset=utf-8' } },
+    )
+  }
+
+  const rows = readyBuyers.map((buyer) => {
     const profile = buyer.shippingProfile
     const totalOunces = buyer.packageWeightOunces
     const pounds = totalOunces === null ? '' : Math.floor(totalOunces / 16)
