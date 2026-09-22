@@ -17,6 +17,8 @@ type Item = {
   priceCents: number
   saleType: 'quick' | 'auction' | 'legacy'
   status: 'open' | 'sold' | 'unsold' | 'void'
+  backupBidderName: string | null
+  backupBidCents: number | null
   createdAt: Date
 }
 
@@ -48,6 +50,10 @@ export default function ActivityItem({
   )
   const [message, setMessage] = useState('')
   const [pending, startTransition] = useTransition()
+  const normalizedBuyerSearch = buyerName.trim().toLowerCase()
+  const visibleBuyers = normalizedBuyerSearch
+    ? buyers.filter((buyer) => buyer.displayName.toLowerCase().includes(normalizedBuyerSearch))
+    : buyers
 
   function save() {
     setMessage('')
@@ -143,6 +149,13 @@ export default function ActivityItem({
             />
           </label>
 
+          {item.backupBidderName && item.backupBidCents !== null ? (
+            <div className={styles.backupBidSnippet}>
+              <span>Backup bidder</span>
+              <strong>{item.backupBidderName} · {dollars(item.backupBidCents)}</strong>
+            </div>
+          ) : null}
+
           <div className={styles.statusPicker}>
             <button
               type="button"
@@ -172,9 +185,9 @@ export default function ActivityItem({
             ) : null}
           </div>
 
-          {status !== 'unsold' && buyers.length ? (
+          {status !== 'unsold' && visibleBuyers.length ? (
             <div className={styles.recentBuyers}>
-              {buyers.slice(0, 16).map((buyer) => (
+              {visibleBuyers.slice(0, 16).map((buyer) => (
                 <button
                   type="button"
                   key={buyer.id + '-' + buyer.displayName}
