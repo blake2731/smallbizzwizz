@@ -55,92 +55,71 @@ export async function shippoRequest<T>(
 }
 
 
-type ShippoAddressBookEntry = {
-  id: string
-  address: {
-    name?: string
-    organization?: string
-    address_line_1?: string
-    address_line_2?: string
-    city_locality?: string
-    state_province?: string
-    postal_code?: string
-    country_code?: string
-  }
-  created_at?: string
-  updated_at?: string
+type ShippoAddress = {
+  object_id: string
+  name?: string
+  company?: string
+  street1?: string
+  street2?: string
+  city?: string
+  state?: string
+  zip?: string
+  country?: string
 }
 
-type ShippoAddressBookList = {
-  count?: number
-  results?: ShippoAddressBookEntry[]
+type ShippoAddressList = {
+  results?: ShippoAddress[]
 }
 
-export async function getShippoAddressBook() {
-  return shippoRequest<ShippoAddressBookList>('/v2/addresses?offset=0&limit=100', {
-    headers: {
-      Accept: 'application/json',
-    },
-  })
+function physicalAddressKey(address: ShippoAddress) {
+  return [
+    address.street1,
+    address.street2,
+    address.city,
+    address.state,
+    address.zip,
+    address.country,
+  ]
+    .map((value) =>
+      (value ?? '')
+        .trim()
+        .toLowerCase()
+        .replace(/\broad\b/g, 'rd')
+        .replace(/\bstreet\b/g, 'st')
+        .replace(/\bavenue\b/g, 'ave')
+        .replace(/\s+/g, ' '),
+    )
+    .join('|')
 }
 
 export async function resolveShippoOriginAddressId() {
   const explicit = process.env.SHIPPO_FROM_ADDRESS_ID?.trim()
   if (explicit) return explicit
 
-  const data = await getShippoAddressBook()
+  const data = await shippoRequest<ShippoAddressList>('/addresses/?results=100')
   const domestic = (data.results ?? []).filter(
-    (entry) => (entry.address.country_code ?? '').toUpperCase() === 'US',
+    (address) => (address.country ?? '').toUpperCase() === 'US',
   )
 
-  if (domestic.length === 1) {
-    return domestic[0].id
-  }
-
-  const uniquePhysicalAddresses = new Map<string, ShippoAddressBookEntry>()
-  for (const entry of domestic) {
-    const address = entry.address
-    const key = [
-      address.address_line_1,
-      address.address_line_2,
-      address.city_locality,
-      address.state_province,
-      address.postal_code,
-      address.country_code,
-    ]
-      .map((value) => (value ?? '').trim().toLowerCase().replace(/\s+/g, ' '))
-      .join('|')
-
-    if (!uniquePhysicalAddresses.has(key)) {
-      uniquePhysicalAddresses.set(key, entry)
-    }
-  }
-
-  if (uniquePhysicalAddresses.size === 1) {
-    return [...uniquePhysicalAddresses.values()][0].id
-  }
-
-  const likely = domestic.filter((entry) => {
-    const haystack = [
-      entry.address.organization,
-      entry.address.name,
-    ]
-      .filter(Boolean)
-      .join(' ')
-      .toLowerCase()
-
-    return haystack.includes('crafty brother')
-  })
-
-  if (likely.length === 1) {
-    return likely[0].id
-  }
-
   if (!domestic.length) {
-    throw new Error('No US sender address was found in the Shippo address book.')
+    throw new Error('No US address was found in Shippo.')
+  }
+
+  const groups = new Map<string, ShippoAddress[]>()
+  for (const address of domestic) {
+    const key = physicalAddressKey(address)
+    const group = groups.get(key) ?? []
+    group.push(address)
+    groups.set(key, group)
+  }
+
+  const ranked = [...groups.values()].sort((a, b) => b.length - a.length)
+
+  if (ranked.length === 1 || ranked[0].length > ranked[1].length) {
+    return ranked[0][0].object_id
   }
 
   throw new Error(
-    'More than one Shippo sender address is saved. Choose the Auction Console sender address once and it will be reused.',
+    'Auction Console found more than one possible Shippo sender address and could not choose safely.',
   )
 }
