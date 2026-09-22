@@ -11,6 +11,7 @@ import {
   auctionCustomerPreference,
   auctionCustomerProfile,
   auctionItem,
+  auctionPackage,
   auctionSession,
 } from '@/lib/auction-schema'
 import {
@@ -447,6 +448,240 @@ function parseDimensionHundredths(value: string, label: string) {
     throw new Error('Enter valid ' + label.toLowerCase())
   }
   return Math.round(number * 100)
+}
+
+async function syncBuyerPackageSummary(buyerId: number) {
+  const packages = await db
+    .select()
+    .from(auctionPackage)
+    .where(eq(auctionPackage.buyerId, buyerId))
+    .orderBy(auctionPackage.packageNumber)
+
+  if (!packages.length) return
+
+  const shippingReady = packages.every((pkg) => pkg.shippingCents !== null)
+  const shippingCents = shippingReady
+    ? packages.reduce((sum, pkg) => sum + (pkg.shippingCents ?? 0), 0)
+    : null
+  const packageStatus = packages.every((pkg) => pkg.status === 'packed') ? 'packed' : 'unpacked'
+  const solePackage = packages.length === 1 ? packages[0] : null
+
+  const [buyer] = await db
+    .select()
+    .from(auctionBuyer)
+    .where(eq(auctionBuyer.id, buyerId))
+    .limit(1)
+
+  if (!buyer) return
+
+  const invoiceStatus =
+    shippingCents === null
+      ? buyer.invoiceStatus === 'paid'
+        ? 'paid'
+        : 'not_ready'
+      : buyer.invoiceStatus === 'sent' || buyer.invoiceStatus === 'paid'
+        ? buyer.invoiceStatus
+        : 'ready'
+
+  await db
+    .update(auctionBuyer)
+    .set({
+      shippingCents,
+      packageStatus,
+      packageWeightOunces: solePackage?.weightOunces ?? null,
+      packageLengthHundredths: solePackage?.lengthHundredths ?? null,
+      packageWidthHundredths: solePackage?.widthHundredths ?? null,
+      packageHeightHundredths: solePackage?.heightHundredths ?? null,
+      invoiceStatus,
+      updatedAt: new Date(),
+    })
+    .where(eq(auctionBuyer.id, buyerId))
+}
+
+async function requireBuyerPackage(auctionId: number, buyerId: number, packageId: number) {
+  const [pkg] = await db
+    .select({ package: auctionPackage })
+    .from(auctionPackage)
+    .innerJoin(auctionBuyer, eq(auctionPackage.buyerId, auctionBuyer.id))
+    .where(
+      and(
+        eq(auctionPackage.id, packageId),
+        eq(auctionPackage.buyerId, buyerId),
+        eq(auctionBuyer.auctionId, auctionId),
+      ),
+    )
+    .limit(1)
+
+  if (!pkg) throw new Error('Package not found')
+  return pkg.package
+}
+
+export async function addAuctionPackageAction(input: {
+  auctionId: number
+  buyerId: number
+}) {
+  const userId = await currentUserId()
+  await requireAuction(userId, input.auctionId)
+
+  const [buyer] = await db
+    .select()
+    .from(auctionBuyer)
+    .where(and(eq(auctionBuyer.id, input.buyerId), eq(auctionBuyer.auctionId, input.auctionId)))
+    .limit(1)
+  if (!buyer) throw new Error('Buyer not found')
+
+  const existing = await db
+    .select()
+    .from(auctionPackage)
+    .where(eq(auctionPackage.buyerId, input.buyerId))
+    .orderBy(desc(auctionPackage.packageNumber))
+
+  const nextNumber = (existing[0]?.packageNumber ?? 0) + 1
+  const [created] = await db
+    .insert(auctionPackage)
+    .values({
+      buyerId: input.buyerId,
+      packageNumber: nextNumber,
+    })
+    .returning()
+
+  await syncBuyerPackageSummary(input.buyerId)
+  revalidatePath('/auction')
+  return { ok: true, packageId: created.id, packageNumber: created.packageNumber }
+}
+
+export async function removeAuctionPackageAction(input: {
+  auctionId: number
+  buyerId: number
+  packageId: number
+}) {
+  const userId = await currentUserId()
+  await requireAuction(userId, input.auctionId)
+  const pkg = await requireBuyerPackage(input.auctionId, input.buyerId, input.packageId)
+
+  const packages = await db
+    .select()
+    .from(auctionPackage)
+    .where(eq(auctionPackage.buyerId, input.buyerId))
+    .orderBy(auctionPackage.packageNumber)
+
+  if (packages.length <= 1) {
+    throw new Error('Each buyer must keep at least one package.')
+  }
+  if (pkg.shopifyLabelUrl || pkg.shopifyLabelPurchaseResultId) {
+    throw new Error('A package with a Shopify label cannot be removed.')
+  }
+
+  const fallback = packages.find((candidate) => candidate.id !== pkg.id)
+  if (!fallback) throw new Error('No fallback package found.')
+
+  await db
+    .update(auctionItem)
+    .set({ packageId: fallback.id })
+    .where(and(eq(auctionItem.buyerId, input.buyerId), eq(auctionItem.packageId, pkg.id)))
+
+  await db.delete(auctionPackage).where(eq(auctionPackage.id, pkg.id))
+  await syncBuyerPackageSummary(input.buyerId)
+  revalidatePath('/auction')
+  return { ok: true }
+}
+
+export async function saveAuctionPackageAction(input: {
+  auctionId: number
+  buyerId: number
+  packageId: number
+  shipping: string
+  packed: boolean
+  weightPounds: string
+  weightOunces: string
+  length: string
+  width: string
+  height: string
+}) {
+  const userId = await currentUserId()
+  await requireAuction(userId, input.auctionId)
+  await requireBuyerPackage(input.auctionId, input.buyerId, input.packageId)
+
+  const shippingCents = input.shipping.trim() ? parseMoneyToCents(input.shipping) : null
+  if (input.shipping.trim() && shippingCents === null) throw new Error('Enter valid shipping')
+
+  const weightPounds = parseWholeNumber(input.weightPounds, 'Weight pounds')
+  const weightOunces = parseWholeNumber(input.weightOunces, 'Weight ounces')
+  if (weightOunces !== null && weightOunces > 15) {
+    throw new Error('Weight ounces must be between 0 and 15')
+  }
+
+  const totalWeightOunces =
+    weightPounds === null && weightOunces === null
+      ? null
+      : (weightPounds ?? 0) * 16 + (weightOunces ?? 0)
+  const lengthHundredths = parseDimensionHundredths(input.length, 'Length')
+  const widthHundredths = parseDimensionHundredths(input.width, 'Width')
+  const heightHundredths = parseDimensionHundredths(input.height, 'Height')
+
+  if (input.packed) {
+    if (!totalWeightOunces || totalWeightOunces <= 0) {
+      throw new Error('Enter the package weight before marking it packed')
+    }
+    if (
+      lengthHundredths === null ||
+      widthHundredths === null ||
+      heightHundredths === null
+    ) {
+      throw new Error('Enter all three package dimensions before marking it packed')
+    }
+  }
+
+  await db
+    .update(auctionPackage)
+    .set({
+      shippingCents,
+      weightOunces: totalWeightOunces,
+      lengthHundredths,
+      widthHundredths,
+      heightHundredths,
+      status: input.packed ? 'packed' : 'unpacked',
+      updatedAt: new Date(),
+    })
+    .where(eq(auctionPackage.id, input.packageId))
+
+  await syncBuyerPackageSummary(input.buyerId)
+  revalidatePath('/auction')
+  return { ok: true }
+}
+
+export async function assignAuctionItemPackageAction(input: {
+  auctionId: number
+  buyerId: number
+  itemId: number
+  packageId: number
+}) {
+  const userId = await currentUserId()
+  await requireAuction(userId, input.auctionId)
+  await requireBuyerPackage(input.auctionId, input.buyerId, input.packageId)
+
+  const [item] = await db
+    .select()
+    .from(auctionItem)
+    .where(
+      and(
+        eq(auctionItem.id, input.itemId),
+        eq(auctionItem.auctionId, input.auctionId),
+        eq(auctionItem.buyerId, input.buyerId),
+        eq(auctionItem.status, 'sold'),
+      ),
+    )
+    .limit(1)
+
+  if (!item) throw new Error('Item not found')
+
+  await db
+    .update(auctionItem)
+    .set({ packageId: input.packageId })
+    .where(eq(auctionItem.id, input.itemId))
+
+  revalidatePath('/auction')
+  return { ok: true }
 }
 
 export async function setBuyerShippingAction(input: {
