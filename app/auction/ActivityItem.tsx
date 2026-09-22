@@ -15,7 +15,7 @@ type Item = {
   itemName: string
   buyerName: string | null
   priceCents: number
-  saleType: 'quick' | 'auction'
+  saleType: 'quick' | 'auction' | 'legacy'
   status: 'open' | 'sold' | 'unsold' | 'void'
   createdAt: Date
 }
@@ -46,7 +46,7 @@ export default function ActivityItem({
   const [status, setStatus] = useState<'open' | 'sold' | 'unsold'>(
     item.status === 'void' ? 'unsold' : item.status,
   )
-  const [saleType, setSaleType] = useState<'quick' | 'auction'>(item.saleType)
+  const [saleType, setSaleType] = useState<'quick' | 'auction' | 'legacy'>(item.saleType)
   const [message, setMessage] = useState('')
   const [pending, startTransition] = useTransition()
 
@@ -156,14 +156,14 @@ export default function ActivityItem({
                 className={styles.compactInput}
                 value={saleType}
                 onChange={(event) => {
-                  const next = event.target.value as 'quick' | 'auction'
+                  const next = event.target.value as 'quick' | 'auction' | 'legacy'
                   setSaleType(next)
                   if (next === 'quick' && status === 'open') setStatus('unsold')
                 }}
                 disabled={pending}
               >
                 <option value="quick">Quick Sale</option>
-                <option value="auction">Auction</option>
+                <option value="auction">Auction</option>\n                <option value="legacy">Imported / unknown</option>
               </select>
             </label>
           </div>
