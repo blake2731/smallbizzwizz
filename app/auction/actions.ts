@@ -570,6 +570,63 @@ export async function setBuyerPaymentAction(input: {
   return { ok: true }
 }
 
+export async function setBuyerPaymentPreferenceAction(input: {
+  auctionId: number
+  buyerId: number
+  method: 'paypal' | 'venmo' | 'meta_pay'
+}) {
+  const userId = await currentUserId()
+  await requireAuction(userId, input.auctionId)
+
+  const [buyer] = await db
+    .select()
+    .from(auctionBuyer)
+    .where(and(eq(auctionBuyer.id, input.buyerId), eq(auctionBuyer.auctionId, input.auctionId)))
+    .limit(1)
+
+  if (!buyer) throw new Error('Buyer not found')
+
+  if (input.method === 'paypal') {
+    await db
+      .delete(auctionCustomerPreference)
+      .where(
+        and(
+          eq(auctionCustomerPreference.userId, userId),
+          eq(auctionCustomerPreference.normalizedName, buyer.normalizedName),
+        ),
+      )
+
+    revalidatePath('/auction')
+    return { ok: true }
+  }
+
+  await db
+    .insert(auctionCustomerPreference)
+    .values({
+      userId,
+      normalizedName: buyer.normalizedName,
+      displayName: buyer.displayName,
+      preferredPaymentMethod: input.method,
+      source: 'manual',
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: [
+        auctionCustomerPreference.userId,
+        auctionCustomerPreference.normalizedName,
+      ],
+      set: {
+        displayName: buyer.displayName,
+        preferredPaymentMethod: input.method,
+        source: 'manual',
+        updatedAt: new Date(),
+      },
+    })
+
+  revalidatePath('/auction')
+  return { ok: true }
+}
+
 export async function saveBuyerContactAction(input: {
   auctionId: number
   buyerId: number
