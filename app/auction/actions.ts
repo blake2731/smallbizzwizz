@@ -906,6 +906,130 @@ export async function createShopifyDraftOrderAction(input: {
   }
 }
 
+type ShopifyDraftOrderStatusResponse = {
+  node:
+    | {
+        id: string
+        status: string
+        order: {
+          id: string
+          name: string
+          fullyPaid: boolean
+          displayFinancialStatus: string | null
+          fulfillmentOrders: {
+            nodes: Array<{
+              id: string
+              status: string
+            }>
+          }
+        } | null
+      }
+    | null
+}
+
+const SHOPIFY_DRAFT_ORDER_STATUS = `
+  query AuctionDraftOrderStatus($id: ID!) {
+    node(id: $id) {
+      ... on DraftOrder {
+        id
+        status
+        order {
+          id
+          name
+          fullyPaid
+          displayFinancialStatus
+          fulfillmentOrders(first: 10) {
+            nodes {
+              id
+              status
+            }
+          }
+        }
+      }
+    }
+  }
+`
+
+export async function syncShopifyOrderAction(input: {
+  auctionId: number
+  buyerId: number
+}) {
+  const userId = await currentUserId()
+  await requireAuction(userId, input.auctionId)
+
+  const [buyer] = await db
+    .select()
+    .from(auctionBuyer)
+    .where(and(eq(auctionBuyer.id, input.buyerId), eq(auctionBuyer.auctionId, input.auctionId)))
+    .limit(1)
+
+  if (!buyer) throw new Error('Buyer not found')
+  if (!buyer.shopifyDraftOrderId) {
+    throw new Error('Create the Shopify checkout link first.')
+  }
+
+  const data = await shopifyGraphql<ShopifyDraftOrderStatusResponse>(
+    SHOPIFY_DRAFT_ORDER_STATUS,
+    { id: buyer.shopifyDraftOrderId },
+  )
+
+  if (!data.node) {
+    throw new Error('Shopify could not find this draft order.')
+  }
+
+  const order = data.node.order
+  if (!order) {
+    return {
+      ok: true,
+      paid: false,
+      draftStatus: data.node.status,
+      message: 'Shopify checkout has not been completed yet.',
+    }
+  }
+
+  const fulfillmentOrder =
+    order.fulfillmentOrders.nodes.find((node) =>
+      ['OPEN', 'IN_PROGRESS', 'SCHEDULED'].includes(node.status),
+    ) ?? order.fulfillmentOrders.nodes[0] ?? null
+
+  const now = new Date()
+  const paidCents =
+    order.fullyPaid && buyer.shopifyDraftOrderTotalCents !== null
+      ? buyer.shopifyDraftOrderTotalCents
+      : buyer.paidCents
+
+  await db
+    .update(auctionBuyer)
+    .set({
+      shopifyOrderId: order.id,
+      shopifyOrderName: order.name,
+      shopifyFinancialStatus: order.displayFinancialStatus,
+      shopifyFulfillmentOrderId: fulfillmentOrder?.id ?? null,
+      invoiceStatus: order.fullyPaid ? 'paid' : buyer.invoiceStatus,
+      paymentMethod: order.fullyPaid ? 'shopify' : buyer.paymentMethod,
+      paymentTransactionId: order.fullyPaid ? order.id : buyer.paymentTransactionId,
+      paidCents,
+      paidAt: order.fullyPaid ? buyer.paidAt ?? now : buyer.paidAt,
+      updatedAt: now,
+    })
+    .where(eq(auctionBuyer.id, buyer.id))
+
+  revalidatePath('/auction')
+
+  return {
+    ok: true,
+    paid: order.fullyPaid,
+    draftStatus: data.node.status,
+    financialStatus: order.displayFinancialStatus,
+    orderId: order.id,
+    orderName: order.name,
+    fulfillmentOrderId: fulfillmentOrder?.id ?? null,
+    message: order.fullyPaid
+      ? 'Shopify payment confirmed.'
+      : 'Shopify order exists but is not fully paid yet.',
+  }
+}
+
 export async function sendShopifyInvoiceAction(input: {
   auctionId: number
   buyerId: number
