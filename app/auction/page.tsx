@@ -319,12 +319,12 @@ export default async function AuctionPage({
                 >
                   🖨 Print packing list
                 </Link>
-                <Link
+                <a
                   className={styles.printPackingLink}
                   href={'/auction/pirate-ship?auction=' + auction.id}
                 >
                   Export Pirate Ship CSV
-                </Link>
+                </a>
                 <div className={styles.progressText}>
                   {metrics.packedCount} of {metrics.buyerCount} packed
                 </div>
