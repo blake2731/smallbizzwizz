@@ -1,0 +1,256 @@
+.screen {
+  min-height: 100vh;
+  background: #0a0d12;
+  padding: 24px;
+  color: #eef1f6;
+}
+
+.toolbar {
+  width: min(1400px, 100%);
+  margin: 0 auto 18px;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 16px;
+  align-items: center;
+}
+
+.toolbar a {
+  color: #aeb8c8;
+  text-decoration: none;
+  font-weight: 800;
+}
+
+.toolbar div {
+  display: grid;
+  gap: 3px;
+  text-align: center;
+}
+
+.toolbar strong {
+  font-size: 15px;
+}
+
+.toolbar span {
+  color: #788398;
+  font-size: 11px;
+}
+
+.sheet {
+  width: min(1400px, 100%);
+  margin: 0 auto;
+  background: white;
+  color: #111;
+  padding: 0.34in;
+  box-shadow: 0 24px 90px rgba(0,0,0,.38);
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 18px;
+  border-bottom: 2px solid #111;
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+}
+
+.brand {
+  font-size: 8pt;
+  font-weight: 900;
+  letter-spacing: .15em;
+}
+
+.header h1 {
+  margin: 1px 0 0;
+  font-size: 18pt;
+  line-height: 1;
+}
+
+.auctionTitle {
+  margin-top: 4px;
+  font-size: 9pt;
+  font-weight: 700;
+}
+
+.headerStats {
+  display: flex;
+  gap: 18px;
+}
+
+.headerStats > div {
+  min-width: 46px;
+  text-align: center;
+}
+
+.headerStats strong,
+.headerStats span {
+  display: block;
+}
+
+.headerStats strong {
+  font-size: 14pt;
+  line-height: 1;
+}
+
+.headerStats span {
+  margin-top: 2px;
+  font-size: 6.5pt;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+}
+
+.columns {
+  columns: 3;
+  column-gap: 0.18in;
+}
+
+.buyerBlock {
+  break-inside: avoid;
+  display: inline-block;
+  width: 100%;
+  border: 1px solid #222;
+  margin: 0 0 0.10in;
+  padding: 0.07in 0.08in;
+}
+
+.buyerHeader {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 6px;
+  align-items: center;
+  border-bottom: 1px solid #888;
+  padding-bottom: 3px;
+  margin-bottom: 3px;
+}
+
+.packBox {
+  font-size: 13pt;
+  line-height: 1;
+}
+
+.buyerIdentity strong,
+.buyerIdentity span {
+  display: block;
+}
+
+.buyerIdentity strong {
+  font-size: 8.5pt;
+  line-height: 1.05;
+}
+
+.buyerIdentity span {
+  margin-top: 1px;
+  font-size: 6pt;
+  color: #444;
+  font-weight: 700;
+}
+
+.packedLabel {
+  font-size: 5.5pt;
+  font-weight: 900;
+  letter-spacing: .08em;
+}
+
+.items {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.items li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: baseline;
+  gap: 4px;
+  padding: 1px 0;
+  font-size: 7pt;
+  line-height: 1.1;
+}
+
+.itemBox {
+  font-size: 8.5pt;
+}
+
+.items strong {
+  font-size: 6.8pt;
+}
+
+.footerLine {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 8px;
+  border-top: 1px solid #bbb;
+  margin-top: 3px;
+  padding-top: 3px;
+  font-size: 6pt;
+}
+
+.notes {
+  text-align: right;
+}
+
+.sheetFooter {
+  display: flex;
+  justify-content: flex-end;
+  gap: 20px;
+  border-top: 2px solid #111;
+  margin-top: 2px;
+  padding-top: 5px;
+  font-size: 6.5pt;
+  font-weight: 900;
+}
+
+@page {
+  size: Letter landscape;
+  margin: 0.25in;
+}
+
+@media print {
+  .screen {
+    min-height: auto;
+    background: white;
+    padding: 0;
+    color: #111;
+  }
+
+  .toolbar {
+    display: none;
+  }
+
+  .sheet {
+    width: auto;
+    margin: 0;
+    padding: 0;
+    box-shadow: none;
+  }
+
+  .columns {
+    columns: 3;
+    column-gap: 0.16in;
+  }
+
+  .buyerBlock {
+    margin-bottom: 0.07in;
+  }
+}
+
+@media screen and (max-width: 900px) {
+  .screen {
+    padding: 12px;
+  }
+
+  .toolbar {
+    grid-template-columns: 1fr;
+    text-align: center;
+  }
+
+  .toolbar a {
+    justify-self: start;
+  }
+
+  .sheet {
+    overflow-x: auto;
+    min-width: 1050px;
+  }
+}
