@@ -1784,3 +1784,114 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+
+.multiPackageSection {
+  display: grid;
+  gap: 12px;
+}
+
+.multiPackageHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  border: 1px solid #293243;
+  border-radius: 14px;
+  background: #0a0f16;
+  padding: 14px;
+}
+
+.multiPackageHeader > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+
+.multiPackageHeader strong {
+  color: #f2f5fa;
+  font-size: 13px;
+}
+
+.multiPackageHeader small {
+  color: #7f899d;
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.packageHeaderActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.packageHeaderBadges {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.packageStack {
+  display: grid;
+  gap: 12px;
+}
+
+.packageContentsPanel {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #293243;
+  border-radius: 14px;
+  background: #0a0f16;
+  padding: 14px;
+}
+
+.packageItemAssignments {
+  display: grid;
+  gap: 7px;
+}
+
+.packageItemAssignment {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 150px;
+  align-items: center;
+  gap: 10px;
+  border-top: 1px solid #202938;
+  padding-top: 7px;
+}
+
+.packageItemAssignment > span {
+  min-width: 0;
+  color: #dce2ec;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+
+.dangerAction {
+  min-height: 44px;
+  border: 1px solid rgba(255, 100, 100, 0.42);
+  border-radius: 11px;
+  background: rgba(255, 100, 100, 0.08);
+  color: #ffb2b2;
+  padding: 0 13px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 900;
+  cursor: pointer;
+}
+
+.dangerAction:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+@media (max-width: 760px) {
+  .multiPackageHeader,
+  .packageHeaderActions {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .packageItemAssignment {
+    grid-template-columns: 1fr;
+  }
+}
