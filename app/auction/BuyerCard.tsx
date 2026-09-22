@@ -27,6 +27,7 @@ type Buyer = {
   invoiceStatus: 'not_ready' | 'ready' | 'sent' | 'paid'
   invoiceMethod: 'messenger' | 'shopify' | 'other' | null
   paymentMethod: string | null
+  preferredPaymentMethod: 'venmo' | 'meta_pay' | null
   paidCents: number | null
   paidAt: Date | null
   subtotalCents: number
@@ -38,7 +39,7 @@ type Buyer = {
 const PAYMENT_METHODS = [
   ['paypal', 'PayPal'],
   ['venmo', 'Venmo'],
-  ['meta_pay', 'Meta Pay'],
+  ['meta_pay', 'Facebook Pay'],
   ['shopify', 'Shopify'],
   ['other', 'Other'],
 ] as const
@@ -72,7 +73,9 @@ export default function BuyerCard({
   )
   const [packed, setPacked] = useState(buyer.packageStatus === 'packed')
   const [email, setEmail] = useState(buyer.email ?? '')
-  const [paymentMethod, setPaymentMethod] = useState(buyer.paymentMethod ?? '')
+  const [paymentMethod, setPaymentMethod] = useState(
+    buyer.paymentMethod ?? buyer.preferredPaymentMethod ?? '',
+  )
   const [message, setMessage] = useState('')
   const [copyLabel, setCopyLabel] = useState('Copy invoice for Messenger')
   const [pending, startTransition] = useTransition()
@@ -96,6 +99,25 @@ export default function BuyerCard({
       'TOTAL: ' + dollars(buyer.dueCents),
     ].filter(Boolean).join('\n')
 
+    const paymentLines =
+      buyer.preferredPaymentMethod === 'venmo'
+        ? [
+            'HOW TO PAY',
+            'Venmo: @Justin-Crouse-6',
+            'PayPal is also available: paypal.me/justincrouse2',
+          ]
+        : buyer.preferredPaymentMethod === 'meta_pay'
+          ? [
+              'HOW TO PAY',
+              'We have you down as preferring Facebook Pay. Reply here and we’ll accommodate you through Facebook Pay.',
+              'PayPal is also available: paypal.me/justincrouse2',
+            ]
+          : [
+              'HOW TO PAY',
+              'PayPal: paypal.me/justincrouse2',
+              'If PayPal isn’t convenient, message us — we can usually accommodate Venmo or Facebook Pay.',
+            ]
+
     const invoiceText = [
       'THE CRAFTY BROTHER',
       'INVOICE',
@@ -107,9 +129,7 @@ export default function BuyerCard({
       '',
       totals,
       '',
-      'HOW TO PAY',
-      'PayPal: paypal.me/justincrouse2',
-      'Venmo: @Justin-Crouse-6',
+      ...paymentLines,
       '',
       'Please send the exact total above and include your name in the payment note so we can match your payment.',
       '',
@@ -162,6 +182,11 @@ export default function BuyerCard({
         <div className={styles.badgeRow}>
           {buyer.privateGroup ? <span className={styles.pgBadge}>PG −10%</span> : null}
           {buyer.packageStatus === 'packed' ? <span className={styles.goodBadge}>Packed</span> : null}
+          {buyer.preferredPaymentMethod ? (
+            <span className={styles.infoBadge}>
+              Prefers {buyer.preferredPaymentMethod === 'venmo' ? 'Venmo' : 'Facebook Pay'}
+            </span>
+          ) : null}
           {buyer.paidAt ? (
             <span className={styles.goodBadge}>Paid · {paymentMethodLabel(buyer.paymentMethod)}</span>
           ) : buyer.invoiceStatus === 'sent' ? (
