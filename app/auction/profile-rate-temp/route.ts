@@ -1,3 +1,4 @@
+// Temporary preview utility used for one time auction data reconciliation.
 import { and, desc, eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import {
