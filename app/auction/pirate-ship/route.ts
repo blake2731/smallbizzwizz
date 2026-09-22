@@ -51,51 +51,57 @@ export async function GET(request: Request) {
     'Note',
   ]
 
-  const readyBuyers = state.buyers.filter((buyer) => {
+  const readyPackages = state.buyers.flatMap((buyer) => {
     const profile = buyer.shippingProfile
-    return (
-      buyer.packageStatus === 'packed' &&
-      Boolean(profile?.address1 && profile.city && profile.state && profile.postalCode) &&
-      buyer.packageWeightOunces !== null &&
-      buyer.packageWeightOunces > 0 &&
-      buyer.packageLengthHundredths !== null &&
-      buyer.packageWidthHundredths !== null &&
-      buyer.packageHeightHundredths !== null
-    )
+    if (!profile?.address1 || !profile.city || !profile.state || !profile.postalCode) {
+      return []
+    }
+
+    return buyer.packages
+      .filter(
+        (pkg) =>
+          pkg.status === 'packed' &&
+          pkg.weightOunces !== null &&
+          pkg.weightOunces > 0 &&
+          pkg.lengthHundredths !== null &&
+          pkg.widthHundredths !== null &&
+          pkg.heightHundredths !== null,
+      )
+      .map((pkg) => ({ buyer, profile, pkg }))
   })
 
-  if (!readyBuyers.length) {
+  if (!readyPackages.length) {
     return new Response(
-      'No packages are ready to export. Save the customer address, weight, dimensions, and mark the package packed first.',
+      'No packages are ready to export. Save the customer address, weight, dimensions, and mark each package packed first.',
       { status: 400, headers: { 'Content-Type': 'text/plain; charset=utf-8' } },
     )
   }
 
-  const rows = readyBuyers.map((buyer) => {
-    const profile = buyer.shippingProfile
-    const totalOunces = buyer.packageWeightOunces
-    const pounds = totalOunces === null ? '' : Math.floor(totalOunces / 16)
-    const ounces = totalOunces === null ? '' : totalOunces % 16
-    const note = buyer.items.map((item) => item.itemName).join('; ')
+  const rows = readyPackages.map(({ buyer, profile, pkg }) => {
+    const pounds = pkg.weightOunces === null ? '' : Math.floor(pkg.weightOunces / 16)
+    const ounces = pkg.weightOunces === null ? '' : pkg.weightOunces % 16
+    const packageItems = buyer.items.filter((item) => item.packageId === pkg.id)
+    const noteItems = packageItems.length ? packageItems : buyer.items
+    const note = noteItems.map((item) => item.itemName).join('; ')
 
     return [
       buyer.displayName,
-      profile?.address1 ?? '',
-      profile?.address2 ?? '',
-      profile?.city ?? '',
-      profile?.state ?? '',
-      profile?.postalCode ?? '',
-      profile?.countryCode ?? 'US',
-      buyer.email ?? profile?.email ?? '',
-      profile?.phone ?? '',
+      profile.address1,
+      profile.address2 ?? '',
+      profile.city,
+      profile.state,
+      profile.postalCode,
+      profile.countryCode ?? 'US',
+      buyer.email ?? profile.email ?? '',
+      profile.phone ?? '',
       pounds,
       ounces,
-      dimension(buyer.packageLengthHundredths),
-      dimension(buyer.packageWidthHundredths),
-      dimension(buyer.packageHeightHundredths),
-      'auction-' + state.auction.id + '-buyer-' + buyer.id,
+      dimension(pkg.lengthHundredths),
+      dimension(pkg.widthHundredths),
+      dimension(pkg.heightHundredths),
+      'auction-' + state.auction.id + '-buyer-' + buyer.id + '-package-' + pkg.packageNumber,
       (buyer.subtotalCents - buyer.discountCents) / 100,
-      note,
+      'Package ' + pkg.packageNumber + ': ' + note,
     ]
   })
 
