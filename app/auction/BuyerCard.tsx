@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
+  createShopifyDraftOrderAction,
   saveBuyerContactAction,
   saveBuyerShippingProfileAction,
   setBuyerInvoiceStatusAction,
@@ -25,6 +26,10 @@ type Buyer = {
   privateGroup: boolean
   email: string | null
   shippingCents: number | null
+  shopifyDraftOrderId: string | null
+  shopifyDraftOrderName: string | null
+  shopifyInvoiceUrl: string | null
+  shopifyDraftOrderTotalCents: number | null
   packageWeightOunces: number | null
   packageLengthHundredths: number | null
   packageWidthHundredths: number | null
@@ -119,6 +124,13 @@ export default function BuyerCard({
   >(buyer.preferredPaymentMethod ?? 'paypal')
   const [message, setMessage] = useState('')
   const [copyLabel, setCopyLabel] = useState('Copy invoice for Messenger')
+  const [shopifyInvoiceUrl, setShopifyInvoiceUrl] = useState(buyer.shopifyInvoiceUrl ?? '')
+  const [shopifyDraftOrderName, setShopifyDraftOrderName] = useState(
+    buyer.shopifyDraftOrderName ?? '',
+  )
+  const [shopifyTotalCents, setShopifyTotalCents] = useState(
+    buyer.shopifyDraftOrderTotalCents,
+  )
   const [pending, startTransition] = useTransition()
 
   async function copyShipment() {
@@ -149,6 +161,48 @@ export default function BuyerCard({
     }
 
     setMessage('Shipment details copied.')
+  }
+
+  async function copyText(value: string, success: string) {
+    try {
+      await navigator.clipboard.writeText(value)
+    } catch {
+      const textarea = document.createElement('textarea')
+      textarea.value = value
+      textarea.style.position = 'fixed'
+      textarea.style.opacity = '0'
+      document.body.appendChild(textarea)
+      textarea.focus()
+      textarea.select()
+      document.execCommand('copy')
+      textarea.remove()
+    }
+    setMessage(success)
+  }
+
+  function createShopifyInvoice() {
+    setMessage('')
+    startTransition(() => {
+      void (async () => {
+        try {
+          const result = await createShopifyDraftOrderAction({
+            auctionId,
+            buyerId: buyer.id,
+          })
+          setShopifyInvoiceUrl(result.invoiceUrl)
+          setShopifyDraftOrderName(result.draftOrderName ?? '')
+          setShopifyTotalCents(result.totalCents)
+          setMessage(
+            result.existing
+              ? 'Existing Shopify checkout link loaded.'
+              : 'Shopify checkout link created.',
+          )
+          router.refresh()
+        } catch (error) {
+          setMessage(error instanceof Error ? error.message : 'Shopify invoice creation failed.')
+        }
+      })()
+    })
   }
 
   async function copyInvoice() {
@@ -589,6 +643,66 @@ export default function BuyerCard({
           >
             📋 {copyLabel}
           </button>
+
+          <div className={styles.paymentPanel}>
+            <div className={styles.paymentPanelTitle}>
+              <span>Shopify checkout</span>
+              <strong>{shopifyDraftOrderName || 'NOT CREATED'}</strong>
+            </div>
+
+            {shopifyInvoiceUrl ? (
+              <>
+                <div className={styles.paidSummary}>
+                  <span>Shopify total</span>
+                  <strong>{dollars(shopifyTotalCents)}</strong>
+                </div>
+                {buyer.dueCents !== null &&
+                shopifyTotalCents !== null &&
+                buyer.dueCents !== shopifyTotalCents ? (
+                  <p className={styles.shopifyTaxNote}>
+                    Shopify total differs from the app total because Shopify calculated the checkout,
+                    including any applicable tax.
+                  </p>
+                ) : null}
+                <div className={styles.invoiceActions}>
+                  <a
+                    className={styles.secondaryAction}
+                    href={shopifyInvoiceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Open Shopify checkout
+                  </a>
+                  <button
+                    className={styles.secondaryAction}
+                    type="button"
+                    onClick={() =>
+                      copyText(shopifyInvoiceUrl, 'Shopify checkout link copied.')
+                    }
+                    disabled={pending}
+                  >
+                    Copy Shopify link
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className={styles.shopifyTaxNote}>
+                  Creates a Shopify payment link using this buyer, their items, saved address,
+                  Private Group discount, and shipping charge. Shopify will calculate the final
+                  checkout total.
+                </p>
+                <button
+                  className={styles.primaryAction}
+                  type="button"
+                  onClick={createShopifyInvoice}
+                  disabled={pending || buyer.shippingCents === null}
+                >
+                  Create Shopify checkout link
+                </button>
+              </>
+            )}
+          </div>
 
           <button
             className={styles.secondaryAction}
