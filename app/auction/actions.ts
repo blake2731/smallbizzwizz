@@ -1410,6 +1410,15 @@ export async function purchaseShopifyLabelAction(input: {
     throw new Error('Check Shopify payment first so the fulfillment order is available.')
   }
 
+  const buyerPackages = await db
+    .select({ id: auctionPackage.id })
+    .from(auctionPackage)
+    .where(eq(auctionPackage.buyerId, buyer.id))
+
+  if (buyerPackages.length !== 1) {
+    throw new Error('This order has multiple packages. Buy labels per package after invoicing.')
+  }
+
   if (!buyer.paidAt || buyer.paymentMethod !== 'shopify') {
     throw new Error('Shopify payment must be confirmed before buying the label.')
   }
