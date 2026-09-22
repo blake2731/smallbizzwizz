@@ -94,10 +94,20 @@ export async function ensureAuctionSchema() {
           buyer_id integer REFERENCES auction_buyer(id) ON DELETE SET NULL,
           item_name text NOT NULL,
           price_cents integer NOT NULL,
+          sale_type text NOT NULL DEFAULT 'quick',
           status text NOT NULL,
+          last_bid_at timestamptz,
           voided_at timestamptz,
           created_at timestamptz NOT NULL DEFAULT now()
         )
+      `)
+      await db.execute(sql`
+        ALTER TABLE auction_item
+        ADD COLUMN IF NOT EXISTS sale_type text NOT NULL DEFAULT 'quick'
+      `)
+      await db.execute(sql`
+        ALTER TABLE auction_item
+        ADD COLUMN IF NOT EXISTS last_bid_at timestamptz
       `)
       await db.execute(sql`
         CREATE INDEX IF NOT EXISTS auction_item_auction_created_idx
@@ -127,11 +137,22 @@ export type AuctionBuyerView = AuctionBuyer & {
   dueCents: number | null
 }
 
+export type KnownBuyer = {
+  id: number
+  displayName: string
+  normalizedName: string
+}
+
+export type AuctionItemView = AuctionItem & {
+  buyerName: string | null
+}
+
 export type AuctionState = {
   auction: AuctionSession
   buyers: AuctionBuyerView[]
-  recentBuyers: AuctionBuyer[]
-  items: Array<AuctionItem & { buyerName: string | null }>
+  recentBuyers: KnownBuyer[]
+  items: AuctionItemView[]
+  openLot: AuctionItemView | null
   metrics: {
     soldCents: number
     soldCount: number
@@ -173,7 +194,7 @@ export async function getAuctionState(userId: string, requestedId?: number | nul
   const auction = auctionRows[0]
   if (!auction) return null
 
-  const [buyers, allItems] = await Promise.all([
+  const [buyers, allItems, buyerHistory] = await Promise.all([
     db
       .select()
       .from(auctionBuyer)
@@ -184,50 +205,79 @@ export async function getAuctionState(userId: string, requestedId?: number | nul
       .from(auctionItem)
       .where(and(eq(auctionItem.auctionId, auction.id), ne(auctionItem.status, 'void')))
       .orderBy(asc(auctionItem.createdAt)),
+    db
+      .select({
+        id: auctionBuyer.id,
+        displayName: auctionBuyer.displayName,
+        normalizedName: auctionBuyer.normalizedName,
+        updatedAt: auctionBuyer.updatedAt,
+      })
+      .from(auctionBuyer)
+      .innerJoin(auctionSession, eq(auctionBuyer.auctionId, auctionSession.id))
+      .where(eq(auctionSession.userId, userId))
+      .orderBy(desc(auctionBuyer.updatedAt))
+      .limit(150),
   ])
 
   const buyerById = new Map(buyers.map((buyer) => [buyer.id, buyer]))
-  const buyerViews: AuctionBuyerView[] = buyers.map((buyer) => {
-    const items = allItems.filter((item) => item.status === 'sold' && item.buyerId === buyer.id)
-    const subtotalCents = items.reduce((sum, item) => sum + item.priceCents, 0)
-    const discountCents = buyer.privateGroup ? Math.round(subtotalCents * 0.1) : 0
-    const dueCents =
-      buyer.shippingCents === null
-        ? null
-        : subtotalCents - discountCents + buyer.shippingCents
+  const buyerViews: AuctionBuyerView[] = buyers
+    .map((buyer) => {
+      const items = allItems.filter((item) => item.status === 'sold' && item.buyerId === buyer.id)
+      const subtotalCents = items.reduce((sum, item) => sum + item.priceCents, 0)
+      const discountCents = buyer.privateGroup ? Math.round(subtotalCents * 0.1) : 0
+      const dueCents =
+        buyer.shippingCents === null
+          ? null
+          : subtotalCents - discountCents + buyer.shippingCents
 
-    return {
-      ...buyer,
-      items,
-      subtotalCents,
-      discountCents,
-      dueCents,
+      return {
+        ...buyer,
+        items,
+        subtotalCents,
+        discountCents,
+        dueCents,
+      }
+    })
+    .filter((buyer) => buyer.items.length > 0)
+
+  const knownBuyerMap = new Map<string, KnownBuyer>()
+  for (const buyer of buyerHistory) {
+    if (!knownBuyerMap.has(buyer.normalizedName)) {
+      knownBuyerMap.set(buyer.normalizedName, {
+        id: buyer.id,
+        displayName: buyer.displayName,
+        normalizedName: buyer.normalizedName,
+      })
     }
-  })
+    if (knownBuyerMap.size >= 24) break
+  }
 
-  const sold = allItems.filter((item) => item.status === 'sold')
-  const unsold = allItems.filter((item) => item.status === 'unsold')
-  const items = [...allItems]
+  const items: AuctionItemView[] = [...allItems]
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
     .map((item) => ({
       ...item,
       buyerName: item.buyerId ? buyerById.get(item.buyerId)?.displayName ?? null : null,
     }))
 
+  const sold = allItems.filter((item) => item.status === 'sold')
+  const unsold = allItems.filter((item) => item.status === 'unsold')
+  const openLot = items.find((item) => item.status === 'open') ?? null
+
   return {
     auction,
     buyers: buyerViews,
-    recentBuyers: buyers.slice(0, 10),
+    recentBuyers: [...knownBuyerMap.values()],
     items,
+    openLot,
     metrics: {
       soldCents: sold.reduce((sum, item) => sum + item.priceCents, 0),
       soldCount: sold.length,
       unsoldCents: unsold.reduce((sum, item) => sum + item.priceCents, 0),
       unsoldCount: unsold.length,
-      buyerCount: buyers.length,
-      packedCount: buyers.filter((buyer) => buyer.packageStatus === 'packed').length,
-      invoicedCount: buyers.filter((buyer) => buyer.invoiceStatus === 'sent').length,
-      paidCount: buyers.filter((buyer) => buyer.invoiceStatus === 'paid').length,
+      buyerCount: buyerViews.length,
+      packedCount: buyerViews.filter((buyer) => buyer.packageStatus === 'packed').length,
+      invoicedCount: buyerViews.filter((buyer) => buyer.invoiceStatus === 'sent').length,
+      paidCount: buyerViews.filter((buyer) => buyer.invoiceStatus === 'paid').length,
     },
   }
 }
