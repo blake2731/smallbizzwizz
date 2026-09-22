@@ -127,6 +127,8 @@ export async function ensureAuctionSchema() {
           sale_type text NOT NULL DEFAULT 'quick',
           status text NOT NULL,
           last_bid_at timestamptz,
+          backup_bidder_name text,
+          backup_bid_cents integer,
           voided_at timestamptz,
           created_at timestamptz NOT NULL DEFAULT now()
         )
@@ -138,6 +140,14 @@ export async function ensureAuctionSchema() {
       await db.execute(sql`
         ALTER TABLE auction_item
         ADD COLUMN IF NOT EXISTS last_bid_at timestamptz
+      `)
+      await db.execute(sql`
+        ALTER TABLE auction_item
+        ADD COLUMN IF NOT EXISTS backup_bidder_name text
+      `)
+      await db.execute(sql`
+        ALTER TABLE auction_item
+        ADD COLUMN IF NOT EXISTS backup_bid_cents integer
       `)
       await db.execute(sql`
         CREATE INDEX IF NOT EXISTS auction_item_auction_created_idx
