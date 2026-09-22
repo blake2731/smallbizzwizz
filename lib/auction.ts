@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, ne, sql } from 'drizzle-orm'
+import { and, asc, desc, eq, ne, sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import {
   auctionBuyer,
@@ -435,13 +435,20 @@ export async function getAuctionState(userId: string, requestedId?: number | nul
       .where(eq(auctionCustomerProfile.userId, userId)),
   ])
 
-  const packages = buyers.length
-    ? await db
+  const packageGroups = await Promise.all(
+    buyers.map(async (buyer) => ({
+      buyerId: buyer.id,
+      packages: await db
         .select()
         .from(auctionPackage)
-        .where(inArray(auctionPackage.buyerId, buyers.map((buyer) => buyer.id)))
-        .orderBy(asc(auctionPackage.packageNumber))
-    : []
+        .where(eq(auctionPackage.buyerId, buyer.id))
+        .orderBy(asc(auctionPackage.packageNumber)),
+    })),
+  )
+
+  const packagesByBuyerId = new Map(
+    packageGroups.map((group) => [group.buyerId, group.packages]),
+  )
 
   const buyerById = new Map(buyers.map((buyer) => [buyer.id, buyer]))
   const preferenceByName = new Map(
@@ -453,9 +460,7 @@ export async function getAuctionState(userId: string, requestedId?: number | nul
   const buyerViews: AuctionBuyerView[] = buyers
     .map((buyer) => {
       const profile = profileByName.get(buyer.normalizedName) ?? null
-      const buyerPackages = packages
-        .filter((pkg) => pkg.buyerId === buyer.id)
-        .sort((a, b) => a.packageNumber - b.packageNumber)
+      const buyerPackages: AuctionPackage[] = packagesByBuyerId.get(buyer.id) ?? []
       const items = allItems.filter((item) => item.status === 'sold' && item.buyerId === buyer.id)
       const subtotalCents = items.reduce((sum, item) => sum + item.priceCents, 0)
       const discountCents = buyer.privateGroup ? Math.round(subtotalCents * 0.1) : 0
@@ -469,10 +474,6 @@ export async function getAuctionState(userId: string, requestedId?: number | nul
         email: buyer.email ?? profile?.email ?? null,
         shippingProfile: profile,
         packages: buyerPackages,
-        packageStatus:
-          buyerPackages.length > 0 && buyerPackages.every((pkg) => pkg.status === 'packed')
-            ? 'packed'
-            : 'unpacked',
         items,
         subtotalCents,
         discountCents,
