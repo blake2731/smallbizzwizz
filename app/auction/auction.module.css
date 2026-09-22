@@ -1485,3 +1485,29 @@
     min-height: 44px;
   }
 }
+
+
+.backupBidSnippet {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 1px solid #2c3544;
+  border-radius: 10px;
+  background: #0c1119;
+  padding: 8px 10px;
+}
+
+.backupBidSnippet span {
+  color: #788499;
+  font-size: 9px;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.backupBidSnippet strong {
+  color: #c9d1df;
+  font-size: 10px;
+  text-align: right;
+}
