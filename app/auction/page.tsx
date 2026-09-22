@@ -312,8 +312,16 @@ export default async function AuctionPage({
                 <h2>Packaging</h2>
                 <p>Pack the order, enter the actual shipping charge, and move on.</p>
               </div>
-              <div className={styles.progressText}>
-                {metrics.packedCount} of {metrics.buyerCount} packed
+              <div className={styles.packHeaderActions}>
+                <Link
+                  className={styles.printPackingLink}
+                  href={'/auction/packing-list?auction=' + auction.id}
+                >
+                  🖨 Print packing list
+                </Link>
+                <div className={styles.progressText}>
+                  {metrics.packedCount} of {metrics.buyerCount} packed
+                </div>
               </div>
             </div>
             <div className={styles.cardGrid}>
