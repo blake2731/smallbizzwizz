@@ -1316,3 +1316,78 @@
     padding-left: 0;
   }
 }
+
+
+.copyInvoiceButton {
+  min-height: 54px;
+  border: 1px solid rgba(101, 113, 255, 0.55);
+  border-radius: 13px;
+  background: linear-gradient(135deg, #5966ea, #7481ff);
+  color: white;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 950;
+  cursor: pointer;
+  box-shadow: 0 10px 28px rgba(89, 102, 234, 0.18);
+}
+
+.copyInvoiceButton:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.futureEmail {
+  border: 1px solid #27303f;
+  border-radius: 12px;
+  background: #0b1017;
+  overflow: hidden;
+}
+
+.futureEmail > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  cursor: pointer;
+  list-style: none;
+  padding: 11px 12px;
+  color: #8f9aaf;
+  font-size: 10px;
+  font-weight: 850;
+}
+
+.futureEmail > summary::-webkit-details-marker {
+  display: none;
+}
+
+.futureEmailBody {
+  display: grid;
+  gap: 9px;
+  border-top: 1px solid #232c3a;
+  padding: 11px 12px 12px;
+}
+
+.futureEmailBody p {
+  margin: 0;
+  color: #788397;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.emailSavedBadge {
+  border-radius: 999px;
+  background: rgba(57, 214, 156, 0.12);
+  padding: 3px 7px;
+  color: #69dbae;
+  font-size: 8px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+@media (max-width: 760px) {
+  .copyInvoiceButton {
+    min-height: 60px;
+    font-size: 14px;
+  }
+}
