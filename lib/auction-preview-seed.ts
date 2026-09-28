@@ -61,9 +61,33 @@ export async function ensureLatestAuctionPreview(userId: string): Promise<number
 
   if (existing) {
     if (existing.updatedAt < CLEAN_BASELINE_CUTOFF) {
-      return resetLatestAuctionPreview(userId)
+      await resetLatestAuctionPreview(userId)
     }
-    return existing.id
+
+    const [tonight] = await db
+      .select({ id: auctionSession.id })
+      .from(auctionSession)
+      .where(
+        and(
+          eq(auctionSession.userId, PREVIEW_OWNER),
+          eq(auctionSession.title, 'September 28, 2026 Auction'),
+        ),
+      )
+      .limit(1)
+
+    if (tonight) return tonight.id
+
+    const [createdTonight] = await db
+      .insert(auctionSession)
+      .values({
+        userId: PREVIEW_OWNER,
+        title: 'September 28, 2026 Auction',
+        saleDate: '2026-09-28',
+        status: 'live',
+      })
+      .returning({ id: auctionSession.id })
+
+    return createdTonight.id
   }
 
   const [auction] = await db
