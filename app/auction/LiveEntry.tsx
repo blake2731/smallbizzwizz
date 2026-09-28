@@ -1,6 +1,6 @@
 'use client'
 
-import { FormEvent, useRef, useState, useTransition } from 'react'
+import { FormEvent, useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import {
   closeAuctionLotAction,
@@ -42,11 +42,15 @@ export default function LiveEntry({
 }) {
   const router = useRouter()
   const itemRef = useRef<HTMLInputElement>(null)
+  const buyerRef = useRef<HTMLInputElement>(null)
+  const busyRef = useRef(false)
+  const [draftReady, setDraftReady] = useState(false)
   const [mode, setMode] = useState<'quick' | 'auction'>(openLot ? 'auction' : 'quick')
   const [itemName, setItemName] = useState('')
   const [buyerName, setBuyerName] = useState('')
   const [price, setPrice] = useState('')
   const [keepBuyer, setKeepBuyer] = useState(false)
+  const [repeatSale, setRepeatSale] = useState(false)
   const [auctionItemName, setAuctionItemName] = useState('')
   const [startingPrice, setStartingPrice] = useState('')
   const [bidderName, setBidderName] = useState('')
@@ -54,8 +58,52 @@ export default function LiveEntry({
   const [message, setMessage] = useState('')
   const [pending, startTransition] = useTransition()
 
+  useEffect(() => {
+    const storageKey = 'tcb-auction-draft-' + auctionId
+    try {
+      const raw = window.localStorage.getItem(storageKey)
+      if (raw) {
+        const draft = JSON.parse(raw) as {
+          itemName?: string
+          buyerName?: string
+          price?: string
+          keepBuyer?: boolean
+          repeatSale?: boolean
+        }
+        setItemName(draft.itemName ?? '')
+        setBuyerName(draft.buyerName ?? '')
+        setPrice(draft.price ?? '')
+        setKeepBuyer(Boolean(draft.keepBuyer))
+        setRepeatSale(Boolean(draft.repeatSale))
+        if (draft.itemName || draft.buyerName || draft.price) {
+          setMessage('Draft restored.')
+        }
+      }
+    } catch {
+      window.localStorage.removeItem(storageKey)
+    } finally {
+      setDraftReady(true)
+    }
+  }, [auctionId])
+
+  useEffect(() => {
+    if (!draftReady) return
+    const storageKey = 'tcb-auction-draft-' + auctionId
+    const hasDraft = Boolean(itemName || buyerName || price || keepBuyer || repeatSale)
+    if (!hasDraft) {
+      window.localStorage.removeItem(storageKey)
+      return
+    }
+    window.localStorage.setItem(
+      storageKey,
+      JSON.stringify({ itemName, buyerName, price, keepBuyer, repeatSale }),
+    )
+  }, [auctionId, buyerName, draftReady, itemName, keepBuyer, price, repeatSale])
+
   function run(action: () => Promise<unknown>, successMessage: string, after?: () => void) {
-    setMessage('')
+    if (busyRef.current) return
+    busyRef.current = true
+    setMessage('Saving…')
     startTransition(() => {
       void (async () => {
         try {
@@ -65,15 +113,37 @@ export default function LiveEntry({
           router.refresh()
         } catch (error) {
           setMessage(error instanceof Error ? error.message : 'Something went wrong.')
+        } finally {
+          busyRef.current = false
         }
       })()
     })
   }
 
   function resetQuick() {
-    setItemName('')
-    setPrice('')
+    if (!repeatSale) {
+      setItemName('')
+      setPrice('')
+    }
     if (!keepBuyer) setBuyerName('')
+
+    requestAnimationFrame(() => {
+      if (repeatSale && !keepBuyer) {
+        buyerRef.current?.focus()
+      } else {
+        itemRef.current?.focus()
+      }
+    })
+  }
+
+  function clearQuickEntry() {
+    setItemName('')
+    setBuyerName('')
+    setPrice('')
+    setKeepBuyer(false)
+    setRepeatSale(false)
+    setMessage('Entry cleared.')
+    window.localStorage.removeItem('tcb-auction-draft-' + auctionId)
     requestAnimationFrame(() => itemRef.current?.focus())
   }
 
@@ -148,9 +218,11 @@ export default function LiveEntry({
   function buyerChips(onSelect: (name: string) => void, query: string) {
     if (!recentBuyers.length) return null
     const normalizedQuery = query.trim().toLowerCase()
-    const visibleBuyers = normalizedQuery
-      ? recentBuyers.filter((buyer) => buyer.displayName.toLowerCase().includes(normalizedQuery))
-      : recentBuyers
+    const visibleBuyers = (
+      normalizedQuery
+        ? recentBuyers.filter((buyer) => buyer.displayName.toLowerCase().includes(normalizedQuery))
+        : recentBuyers
+    ).slice(0, normalizedQuery ? 12 : 8)
 
     if (!visibleBuyers.length) return null
 
@@ -180,14 +252,26 @@ export default function LiveEntry({
             {mode === 'quick' ? 'Quick sale' : 'Auction lot'}
           </h2>
         </div>
-        <button
-          className={styles.undoButton}
-          type="button"
-          onClick={undo}
-          disabled={pending}
-        >
-          ↶ Undo last
-        </button>
+        <div className={styles.headerActions}>
+          {mode === 'quick' ? (
+            <button
+              className={styles.clearEntryButton}
+              type="button"
+              onClick={clearQuickEntry}
+              disabled={pending}
+            >
+              Clear entry
+            </button>
+          ) : null}
+          <button
+            className={styles.undoButton}
+            type="button"
+            onClick={undo}
+            disabled={pending}
+          >
+            ↶ Undo last
+          </button>
+        </div>
       </div>
 
       <div className={styles.saleModeSwitch}>
@@ -219,6 +303,7 @@ export default function LiveEntry({
               onChange={(event) => setItemName(event.target.value)}
               placeholder="Dual tank humidifier"
               autoComplete="off"
+              autoCapitalize="sentences"
               enterKeyHint="next"
               disabled={pending}
             />
@@ -227,11 +312,14 @@ export default function LiveEntry({
           <label className={styles.fieldGroup}>
             <span>Buyer</span>
             <input
+              ref={buyerRef}
               className={styles.bigInput}
               value={buyerName}
               onChange={(event) => setBuyerName(event.target.value)}
-              placeholder="Tap a buyer below or type a name"
+              placeholder="Tap a recent buyer or type a name"
               autoComplete="off"
+              autoCapitalize="words"
+              autoCorrect="off"
               enterKeyHint="next"
               disabled={pending}
             />
@@ -256,14 +344,24 @@ export default function LiveEntry({
               </div>
             </label>
 
-            <label className={styles.keepBuyer}>
-              <input
-                type="checkbox"
-                checked={keepBuyer}
-                onChange={(event) => setKeepBuyer(event.target.checked)}
-              />
-              <span>Keep this buyer selected</span>
-            </label>
+            <div className={styles.entryToggles}>
+              <label className={styles.keepBuyer}>
+                <input
+                  type="checkbox"
+                  checked={keepBuyer}
+                  onChange={(event) => setKeepBuyer(event.target.checked)}
+                />
+                <span>Keep buyer</span>
+              </label>
+              <label className={styles.repeatSale}>
+                <input
+                  type="checkbox"
+                  checked={repeatSale}
+                  onChange={(event) => setRepeatSale(event.target.checked)}
+                />
+                <span>Repeat item + price</span>
+              </label>
+            </div>
           </div>
 
           <div className={styles.liveButtons}>
@@ -301,8 +399,10 @@ export default function LiveEntry({
                 className={styles.bigInput}
                 value={bidderName}
                 onChange={(event) => setBidderName(event.target.value)}
-                placeholder="Tap a buyer or type a name"
+                placeholder="Tap a recent buyer or type a name"
                 autoComplete="off"
+                autoCapitalize="words"
+                autoCorrect="off"
                 disabled={pending}
               />
             </label>
@@ -317,7 +417,9 @@ export default function LiveEntry({
                   className={styles.moneyInput}
                   value={bid}
                   onChange={(event) => setBid(event.target.value)}
-                  placeholder={(openLot.priceCents / 100 + 1).toFixed(2)}
+                  placeholder={(
+                    openLot.priceCents / 100 + (openLot.buyerName ? 1 : 0)
+                  ).toFixed(2)}
                   inputMode="decimal"
                   disabled={pending}
                 />
@@ -386,7 +488,7 @@ export default function LiveEntry({
       <div className={styles.entryHint}>
         {message || (
           mode === 'quick'
-            ? 'Quick Sale is for first-response wins at a fixed price.'
+            ? 'Saved sales survive refresh. Use Repeat item + price when several people buy the same thing.'
             : openLot
               ? 'Keep updating the high bid until time is up, then close the lot.'
               : 'Open one auction lot at a time and keep its high bid on screen.'

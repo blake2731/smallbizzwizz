@@ -165,7 +165,7 @@ async function insertSoldItem(input: LiveItemInput) {
 
 async function insertUnsoldItem(input: LiveItemInput) {
   const itemName = input.itemName.trim()
-  const priceCents = parseMoneyToCents(input.price)
+  const priceCents = input.price.trim() ? parseMoneyToCents(input.price) : 0
   if (!itemName) throw new Error('Item is required')
   if (priceCents === null) throw new Error('Enter a valid price')
 
@@ -267,8 +267,12 @@ export async function updateAuctionHighBidAction(input: {
 
   const bidCents = parseMoneyToCents(input.bid)
   if (bidCents === null) throw new Error('Enter a valid bid')
-  if (bidCents <= item.priceCents) {
-    throw new Error('New high bid must be higher than the current amount. Use Edit for corrections.')
+  if (item.buyerId ? bidCents <= item.priceCents : bidCents < item.priceCents) {
+    throw new Error(
+      item.buyerId
+        ? 'New high bid must be higher than the current amount. Use Edit for corrections.'
+        : 'First bid cannot be below the starting price.',
+    )
   }
 
   const buyer = await getOrCreateBuyer(input.auctionId, input.buyerName)

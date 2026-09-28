@@ -1773,3 +1773,104 @@
     grid-template-columns: 1fr;
   }
 }
+
+
+.headerActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.clearEntryButton {
+  min-height: 44px;
+  border: 1px solid #2d3646;
+  border-radius: 11px;
+  background: transparent;
+  padding: 0 13px;
+  color: #8f9aaf;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.clearEntryButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.entryToggles {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.repeatSale {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 58px;
+  border: 1px solid #293243;
+  border-radius: 12px;
+  background: #0b1017;
+  padding: 0 12px;
+  color: #aeb7c7;
+  font-size: 12px;
+  font-weight: 750;
+}
+
+.repeatSale input {
+  width: 22px;
+  height: 22px;
+  accent-color: #6571ff;
+}
+
+@media (min-width: 761px) and (max-width: 1120px) {
+  .metricGrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+
+  .metricPrimary {
+    grid-column: auto;
+  }
+
+  .metric,
+  .metricPrimary {
+    padding: 11px 13px;
+  }
+
+  .metric strong,
+  .metricPrimary strong {
+    font-size: 24px;
+  }
+
+  .liveButtons {
+    position: sticky;
+    z-index: 7;
+    bottom: calc(78px + env(safe-area-inset-bottom));
+    border-radius: 16px;
+    background: rgba(13, 17, 24, 0.96);
+    padding-top: 8px;
+  }
+}
+
+@media (max-width: 760px) {
+  .headerActions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .clearEntryButton,
+  .undoButton {
+    min-height: 40px;
+  }
+
+  .entryToggles {
+    grid-template-columns: 1fr;
+  }
+
+  .repeatSale,
+  .keepBuyer {
+    min-height: 48px;
+  }
+}

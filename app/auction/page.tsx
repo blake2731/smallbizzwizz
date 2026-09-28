@@ -75,11 +75,11 @@ export default async function AuctionPage({
   const viewParam = Array.isArray(params.view) ? params.view[0] : params.view
   const view = VIEWS.some(([key]) => key === viewParam) ? viewParam! : 'live'
 
-  const seededAuctionId = await ensureLatestAuctionPreview(userId)
+  await ensureLatestAuctionPreview(userId)
   const selectedAuctionId =
     requestedAuctionId && Number.isFinite(requestedAuctionId)
       ? requestedAuctionId
-      : seededAuctionId
+      : null
 
   const [auctions, state] = await Promise.all([
     getAuctionList(userId),
