@@ -10,6 +10,8 @@ import LiveEntry from './LiveEntry'
 import BuyerCard from './BuyerCard'
 import ShippingWorkflow from './ShippingWorkflow'
 import InvoiceWorkflow from './InvoiceWorkflow'
+import PackWorkflow from './PackWorkflow'
+import BuyerReviewWorkflow from './BuyerReviewWorkflow'
 import ActivityItem from './ActivityItem'
 import { getAuctionList, getAuctionState, money } from '@/lib/auction'
 import { ensureLatestAuctionPreview } from '@/lib/auction-preview-seed'
@@ -309,11 +311,11 @@ export default async function AuctionPage({
                 <p>One card per buyer. This is where PG status belongs—not in the live-entry flow.</p>
               </div>
             </div>
-            <div className={styles.cardGrid}>
-              {buyers.map((buyer) => (
-                <BuyerCard key={buyer.id} auctionId={auction.id} auctionTitle={auction.title} buyer={buyer} mode="buyers" />
-              ))}
-            </div>
+            <BuyerReviewWorkflow
+              auctionId={auction.id}
+              auctionTitle={auction.title}
+              buyers={buyers}
+            />
           </section>
         ) : null}
 
@@ -337,11 +339,11 @@ export default async function AuctionPage({
                 </div>
               </div>
             </div>
-            <div className={styles.cardGrid}>
-              {packBuyers.map((buyer) => (
-                <BuyerCard key={buyer.id} auctionId={auction.id} auctionTitle={auction.title} buyer={buyer} mode="pack" />
-              ))}
-            </div>
+            <PackWorkflow
+              auctionId={auction.id}
+              auctionTitle={auction.title}
+              buyers={packBuyers}
+            />
           </section>
         ) : null}
 
