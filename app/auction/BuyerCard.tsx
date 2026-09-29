@@ -371,6 +371,25 @@ export default function BuyerCard({
     })
   }
 
+  const itemGroups = Array.from(
+    buyer.items.reduce((groups, item) => {
+      const key = item.itemName.trim().toLowerCase() + '|' + item.priceCents
+      const existing = groups.get(key)
+      if (existing) {
+        existing.quantity += 1
+        existing.totalCents += item.priceCents
+      } else {
+        groups.set(key, {
+          key,
+          itemName: item.itemName,
+          quantity: 1,
+          totalCents: item.priceCents,
+        })
+      }
+      return groups
+    }, new Map<string, { key: string; itemName: string; quantity: number; totalCents: number }>()),
+  ).map(([, group]) => group)
+
   return (
     <article className={styles.buyerCard}>
       <div className={styles.buyerCardTop}>
@@ -397,10 +416,13 @@ export default function BuyerCard({
       </div>
 
       <div className={styles.itemList}>
-        {buyer.items.map((item) => (
-          <div className={styles.itemLine} key={item.id}>
-            <span>{item.itemName}</span>
-            <strong>{dollars(item.priceCents)}</strong>
+        {itemGroups.map((group) => (
+          <div className={styles.itemLine} key={group.key}>
+            <span>
+              {group.itemName}
+              {group.quantity > 1 ? <em> × {group.quantity}</em> : null}
+            </span>
+            <strong>{dollars(group.totalCents)}</strong>
           </div>
         ))}
       </div>
