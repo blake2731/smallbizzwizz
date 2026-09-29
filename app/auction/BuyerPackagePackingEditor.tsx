@@ -35,6 +35,65 @@ function dimensionValue(hundredths: number | null) {
   return String(hundredths / 100)
 }
 
+function LetterCard({
+  auctionId,
+  buyerId,
+  pkg,
+}: {
+  auctionId: number
+  buyerId: number
+  pkg: Package
+}) {
+  const router = useRouter()
+  const [pending, startTransition] = useTransition()
+  const [message, setMessage] = useState('')
+
+  function markPacked() {
+    setMessage('')
+    startTransition(() => {
+      void (async () => {
+        try {
+          await saveAuctionPackageAction({
+            auctionId,
+            buyerId,
+            packageId: pkg.id,
+            shipping: pkg.shippingCents === null ? '' : (pkg.shippingCents / 100).toFixed(2),
+            packed: true,
+            weightPounds: '',
+            weightOunces: '',
+            length: '',
+            width: '',
+            height: '',
+            mailingMode: 'letter',
+          })
+          setMessage('Letter marked packed.')
+          router.refresh()
+        } catch (error) {
+          setMessage(error instanceof Error ? error.message : 'Could not save letter.')
+        }
+      })()
+    })
+  }
+
+  return (
+    <div className={styles.letterPackCard}>
+      <div>
+        <strong>✉️ Letter + 2 stamps</strong>
+        <small>Seeds do not need package weight or box dimensions here.</small>
+      </div>
+      <button
+        className={pkg.status === 'packed' ? styles.secondaryAction : styles.primaryAction}
+        type="button"
+        onClick={markPacked}
+        disabled={pending}
+      >
+        {pending ? 'Saving…' : pkg.status === 'packed' ? 'Packed ✓' : 'Mark packed'}
+      </button>
+      {message ? <div className={styles.cardMessage}>{message}</div> : null}
+    </div>
+  )
+}
+
 function PackageCard({
   auctionId,
   buyerId,
@@ -58,18 +117,76 @@ function PackageCard({
   const [length, setLength] = useState(dimensionValue(pkg.lengthHundredths))
   const [width, setWidth] = useState(dimensionValue(pkg.widthHundredths))
   const [height, setHeight] = useState(dimensionValue(pkg.heightHundredths))
-  const [packed, setPacked] = useState(pkg.status === 'packed')
 
-  function run(action: () => Promise<unknown>, success: string) {
+  const pounds = Number(weightPounds || 0)
+  const ounces = Number(weightOunces || 0)
+  const totalOunces = pounds * 16 + ounces
+  const validWeight =
+    Number.isFinite(totalOunces) &&
+    totalOunces > 0 &&
+    Number.isInteger(pounds) &&
+    Number.isInteger(ounces) &&
+    pounds >= 0 &&
+    ounces >= 0 &&
+    ounces <= 15
+
+  const validDimension = (value: string) => {
+    const number = Number(value)
+    return value.trim() !== '' && Number.isFinite(number) && number > 0
+  }
+
+  const complete =
+    validWeight &&
+    validDimension(length) &&
+    validDimension(width) &&
+    validDimension(height)
+
+  function savePackage() {
+    if (!complete) {
+      setMessage('Enter the package weight and all three dimensions.')
+      return
+    }
+
     setMessage('')
     startTransition(() => {
       void (async () => {
         try {
-          await action()
-          setMessage(success)
+          await saveAuctionPackageAction({
+            auctionId,
+            buyerId,
+            packageId: pkg.id,
+            shipping: pkg.shippingCents === null ? '' : (pkg.shippingCents / 100).toFixed(2),
+            packed: true,
+            weightPounds,
+            weightOunces,
+            length,
+            width,
+            height,
+            mailingMode: 'parcel',
+          })
+          setMessage('Package saved and marked packed.')
           router.refresh()
         } catch (error) {
-          setMessage(error instanceof Error ? error.message : 'Update failed.')
+          setMessage(error instanceof Error ? error.message : 'Could not save package.')
+        }
+      })()
+    })
+  }
+
+  function removePackage() {
+    if (!window.confirm('Remove Package ' + pkg.packageNumber + '?')) return
+    setMessage('')
+    startTransition(() => {
+      void (async () => {
+        try {
+          await removeAuctionPackageAction({
+            auctionId,
+            buyerId,
+            packageId: pkg.id,
+          })
+          router.refresh()
+        } catch (error) {
+          setMessage(error instanceof Error ? error.message : 'Could not remove package.')
         }
       })()
     })
@@ -80,9 +197,9 @@ function PackageCard({
       <div className={styles.packSectionTitle}>
         <div>
           <strong>Package {pkg.packageNumber}</strong>
-          <small>Enter the finished package weight and outside dimensions.</small>
+          <small>Finished weight and outside dimensions.</small>
         </div>
-        {packed ? (
+        {pkg.status === 'packed' ? (
           <span className={styles.profileStatus}>Packed</span>
         ) : (
           <span className={styles.profileStatusMuted}>Needs packing</span>
@@ -113,96 +230,66 @@ function PackageCard({
           />
         </label>
         <label className={styles.fieldGroup}>
-          <span>Length in</span>
+          <span>Length</span>
           <input
             className={styles.compactInput}
             inputMode="decimal"
             value={length}
             onChange={(event) => setLength(event.target.value)}
-            placeholder="12"
+            placeholder="in"
             disabled={pending}
           />
         </label>
         <label className={styles.fieldGroup}>
-          <span>Width in</span>
+          <span>Width</span>
           <input
             className={styles.compactInput}
             inputMode="decimal"
             value={width}
             onChange={(event) => setWidth(event.target.value)}
-            placeholder="9"
+            placeholder="in"
             disabled={pending}
           />
         </label>
         <label className={styles.fieldGroup}>
-          <span>Height in</span>
+          <span>Height</span>
           <input
             className={styles.compactInput}
             inputMode="decimal"
             value={height}
             onChange={(event) => setHeight(event.target.value)}
-            placeholder="2"
+            placeholder="in"
             disabled={pending}
           />
         </label>
       </div>
 
-      <label className={styles.packCheck}>
-        <input
-          type="checkbox"
-          checked={packed}
-          onChange={(event) => setPacked(event.target.checked)}
-          disabled={pending}
-        />
-        <span>Package {pkg.packageNumber} is packed and measured</span>
-      </label>
+      {!complete && (weightPounds || weightOunces || length || width || height) ? (
+        <div className={styles.inlineHint}>Weight must be positive, ounces 0–15, and all dimensions greater than 0.</div>
+      ) : null}
 
       <div className={styles.packageActions}>
         <button
           className={styles.primaryAction}
           type="button"
-          onClick={() =>
-            run(
-              () =>
-                saveAuctionPackageAction({
-                  auctionId,
-                  buyerId,
-                  packageId: pkg.id,
-                  shipping: pkg.shippingCents === null ? '' : (pkg.shippingCents / 100).toFixed(2),
-                  packed,
-                  weightPounds,
-                  weightOunces,
-                  length,
-                  width,
-                  height,
-                }),
-              'Package ' + pkg.packageNumber + ' saved.',
-            )
-          }
-          disabled={pending}
+          onClick={savePackage}
+          disabled={pending || !complete}
         >
-          {pending ? 'Saving…' : 'Save package ' + pkg.packageNumber}
+          {pending
+            ? 'Saving…'
+            : pkg.status === 'packed'
+              ? 'Save changes'
+              : 'Save & mark packed'}
         </button>
 
         {packageCount > 1 ? (
           <button
             className={styles.dangerAction}
             type="button"
-            onClick={() => {
-              if (!window.confirm('Remove Package ' + pkg.packageNumber + '?')) return
-              run(
-                () =>
-                  removeAuctionPackageAction({
-                    auctionId,
-                    buyerId,
-                    packageId: pkg.id,
-                  }),
-                'Package removed.',
-              )
-            }}
+            onClick={removePackage}
             disabled={pending || Boolean(pkg.shippoTransactionId || pkg.shippoLabelUrl)}
           >
-            Remove package
+            Remove
           </button>
         ) : null}
       </div>
@@ -226,6 +313,10 @@ export default function BuyerPackagePackingEditor({
   const router = useRouter()
   const [pending, startTransition] = useTransition()
   const [message, setMessage] = useState('')
+
+  const letterOnly =
+    items.length > 0 &&
+    items.every((item) => item.itemName.trim().toLowerCase() === 'seeds')
 
   function addPackage() {
     setMessage('')
@@ -257,33 +348,35 @@ export default function BuyerPackagePackingEditor({
     })
   }
 
+  if (letterOnly && packages[0]) {
+    return (
+      <LetterCard
+        auctionId={auctionId}
+        buyerId={buyerId}
+        pkg={packages[0]}
+      />
+    )
+  }
+
   return (
     <div className={styles.multiPackageSection}>
-      <div className={styles.multiPackageHeader}>
-        <div>
-          <strong>
-            {packages.length} {packages.length === 1 ? 'package' : 'packages'}
-          </strong>
-          <small>Add a second box only when this buyer cannot fit into the first package.</small>
-        </div>
+      <div className={styles.compactPackageHeader}>
+        <span>
+          <strong>{packages.length}</strong> {packages.length === 1 ? 'package' : 'packages'}
+        </span>
         <button
           className={styles.secondaryAction}
           type="button"
           onClick={addPackage}
           disabled={pending}
         >
-          Add package
+          + Add box
         </button>
       </div>
 
       {packages.length > 1 ? (
-        <div className={styles.packageContentsPanel}>
-          <div className={styles.packSectionTitle}>
-            <div>
-              <strong>Which items go in each box?</strong>
-              <small>Move items only when this buyer has more than one package.</small>
-            </div>
-          </div>
+        <details className={styles.packageAssignmentDetails}>
+          <summary>Assign items to boxes</summary>
           <div className={styles.packageItemAssignments}>
             {items.map((item) => (
               <label className={styles.packageItemAssignment} key={item.id}>
@@ -303,7 +396,7 @@ export default function BuyerPackagePackingEditor({
               </label>
             ))}
           </div>
-        </div>
+        </details>
       ) : null}
 
       <div className={styles.packageStack}>

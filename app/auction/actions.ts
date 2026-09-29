@@ -651,32 +651,42 @@ export async function saveAuctionPackageAction(input: {
   length: string
   width: string
   height: string
+  mailingMode?: 'parcel' | 'letter'
 }) {
   const userId = await currentUserId()
   await requireAuction(userId, input.auctionId)
   const current = await requireBuyerPackage(input.auctionId, input.buyerId, input.packageId)
+  const mailingMode = input.mailingMode ?? 'parcel'
 
   const shippingCents = input.shipping.trim() ? parseMoneyToCents(input.shipping) : null
   if (input.shipping.trim() && shippingCents === null) {
     throw new Error('Enter valid shipping')
   }
 
-  const weightPounds = parseWholeNumber(input.weightPounds, 'Weight pounds')
-  const weightOunces = parseWholeNumber(input.weightOunces, 'Weight ounces')
+  const weightPounds =
+    mailingMode === 'letter' ? null : parseWholeNumber(input.weightPounds, 'Weight pounds')
+  const weightOunces =
+    mailingMode === 'letter' ? null : parseWholeNumber(input.weightOunces, 'Weight ounces')
+
   if (weightOunces !== null && weightOunces > 15) {
     throw new Error('Weight ounces must be between 0 and 15')
   }
 
   const totalWeightOunces =
-    weightPounds === null && weightOunces === null
+    mailingMode === 'letter'
       ? null
-      : (weightPounds ?? 0) * 16 + (weightOunces ?? 0)
+      : weightPounds === null && weightOunces === null
+        ? null
+        : (weightPounds ?? 0) * 16 + (weightOunces ?? 0)
 
-  const lengthHundredths = parseDimensionHundredths(input.length, 'Length')
-  const widthHundredths = parseDimensionHundredths(input.width, 'Width')
-  const heightHundredths = parseDimensionHundredths(input.height, 'Height')
+  const lengthHundredths =
+    mailingMode === 'letter' ? null : parseDimensionHundredths(input.length, 'Length')
+  const widthHundredths =
+    mailingMode === 'letter' ? null : parseDimensionHundredths(input.width, 'Width')
+  const heightHundredths =
+    mailingMode === 'letter' ? null : parseDimensionHundredths(input.height, 'Height')
 
-  if (input.packed) {
+  if (input.packed && mailingMode === 'parcel') {
     if (!totalWeightOunces || totalWeightOunces <= 0) {
       throw new Error('Enter the package weight before marking it packed')
     }
@@ -695,6 +705,34 @@ export async function saveAuctionPackageAction(input: {
     current.widthHundredths !== widthHundredths ||
     current.heightHundredths !== heightHundredths
 
+  if (
+    (measurementsChanged || mailingMode === 'letter') &&
+    (current.shippoTransactionId || current.shippoLabelUrl)
+  ) {
+    throw new Error('This package already has a purchased label. Do not change its package details.')
+  }
+
+  const shippingModeFields =
+    mailingMode === 'letter'
+      ? {
+          shippoShipmentId: null,
+          shippoRateId: null,
+          shippoProvider: 'Manual mail',
+          shippoService: 'Letter + 2 stamps',
+          shippoRateCents: null,
+          shippoQuotedAt: null,
+        }
+      : measurementsChanged
+        ? {
+            shippoShipmentId: null,
+            shippoRateId: null,
+            shippoProvider: null,
+            shippoService: null,
+            shippoRateCents: null,
+            shippoQuotedAt: null,
+          }
+        : {}
+
   await db
     .update(auctionPackage)
     .set({
@@ -704,16 +742,7 @@ export async function saveAuctionPackageAction(input: {
       widthHundredths,
       heightHundredths,
       status: input.packed ? 'packed' : 'unpacked',
-      ...(measurementsChanged
-        ? {
-            shippoShipmentId: null,
-            shippoRateId: null,
-            shippoProvider: null,
-            shippoService: null,
-            shippoRateCents: null,
-            shippoQuotedAt: null,
-          }
-        : {}),
+      ...shippingModeFields,
       updatedAt: new Date(),
     })
     .where(eq(auctionPackage.id, input.packageId))

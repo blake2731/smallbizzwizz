@@ -8,6 +8,7 @@ import {
 } from './actions'
 import LiveEntry from './LiveEntry'
 import BuyerCard from './BuyerCard'
+import ShippingWorkflow from './ShippingWorkflow'
 import ActivityItem from './ActivityItem'
 import { getAuctionList, getAuctionState, money } from '@/lib/auction'
 import { ensureLatestAuctionPreview } from '@/lib/auction-preview-seed'
@@ -136,6 +137,13 @@ export default async function AuctionPage({
     if (aReady !== bReady) return aReady - bReady
     return a.displayName.localeCompare(b.displayName)
   })
+  const shippingReadyCount = buyers.filter((buyer) => {
+    const profile = buyer.shippingProfile
+    const hasAddress = Boolean(profile?.address1 && profile?.city && profile?.state && profile?.postalCode)
+    const allPacked = buyer.packages.length > 0 && buyer.packages.every((pkg) => pkg.status === 'packed')
+    const allCharged = buyer.packages.length > 0 && buyer.packages.every((pkg) => pkg.shippingCents !== null)
+    return hasAddress && allPacked && allCharged
+  }).length
 
   return (
     <main className={styles.shell}>
@@ -211,6 +219,9 @@ export default async function AuctionPage({
               {label}
               {key === 'pack' && metrics.buyerCount ? (
                 <span>{metrics.packedCount}/{metrics.buyerCount}</span>
+              ) : null}
+              {key === 'shipping' && metrics.buyerCount ? (
+                <span>{shippingReadyCount}/{metrics.buyerCount}</span>
               ) : null}
               {key === 'invoice' && metrics.buyerCount ? (
                 <span>{metrics.invoicedCount}/{metrics.buyerCount}</span>
@@ -339,25 +350,49 @@ export default async function AuctionPage({
               <div>
                 <p className={styles.kicker}>After packing</p>
                 <h2>Shipping</h2>
-                <p>Add or confirm the customer address, then enter the individual shipping charge before invoicing.</p>
+                <p>
+                  Work one buyer at a time. Addresses and shipping charges live here; package measurements are shown as read-only summaries from Pack.
+                </p>
               </div>
-              <div className={styles.packHeaderActions}>
-                <a
-                  className={styles.printPackingLink}
-                  href={'/auction/pirate-ship?auction=' + auction.id}
-                >
-                  Export Pirate Ship CSV
-                </a>
-                <div className={styles.progressText}>
-                  {metrics.packedCount} of {metrics.buyerCount} packed
-                </div>
+              <div className={styles.progressText}>
+                {shippingReadyCount} of {metrics.buyerCount} ready to invoice
               </div>
             </div>
-            <div className={styles.cardGrid}>
-              {packBuyers.map((buyer) => (
-                <BuyerCard key={buyer.id} auctionId={auction.id} auctionTitle={auction.title} buyer={buyer} mode="shipping" />
-              ))}
-            </div>
+            <ShippingWorkflow
+              auctionId={auction.id}
+              buyers={packBuyers.map((buyer) => ({
+                id: buyer.id,
+                displayName: buyer.displayName,
+                itemCount: buyer.items.length,
+                subtotalCents: buyer.subtotalCents,
+                shippingCents: buyer.shippingCents,
+                itemNames: buyer.items.map((item) => item.itemName),
+                shippingProfile: buyer.shippingProfile
+                  ? {
+                      email: buyer.shippingProfile.email,
+                      phone: buyer.shippingProfile.phone,
+                      address1: buyer.shippingProfile.address1,
+                      address2: buyer.shippingProfile.address2,
+                      city: buyer.shippingProfile.city,
+                      state: buyer.shippingProfile.state,
+                      postalCode: buyer.shippingProfile.postalCode,
+                      countryCode: buyer.shippingProfile.countryCode,
+                    }
+                  : null,
+                packages: buyer.packages.map((pkg) => ({
+                  id: pkg.id,
+                  packageNumber: pkg.packageNumber,
+                  weightOunces: pkg.weightOunces,
+                  lengthHundredths: pkg.lengthHundredths,
+                  widthHundredths: pkg.widthHundredths,
+                  heightHundredths: pkg.heightHundredths,
+                  shippingCents: pkg.shippingCents,
+                  status: pkg.status,
+                  shippoProvider: pkg.shippoProvider,
+                  shippoService: pkg.shippoService,
+                })),
+              }))}
+            />
           </section>
         ) : null}
 

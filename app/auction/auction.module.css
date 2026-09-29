@@ -200,7 +200,7 @@
 
 .tabs {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(5, minmax(92px, 1fr));
   gap: 6px;
   margin-bottom: 16px;
   border: 1px solid #202736;
@@ -1872,5 +1872,410 @@
   .repeatSale,
   .keepBuyer {
     min-height: 48px;
+  }
+}
+
+
+/* Task-focused post-auction workflow */
+.tabs {
+  overflow-x: auto;
+}
+
+.tabs::-webkit-scrollbar {
+  height: 0;
+}
+
+.compactPackageHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #293243;
+  border-radius: 12px;
+  background: #0a0f16;
+  padding: 10px 12px;
+}
+
+.compactPackageHeader > span {
+  color: #8d98aa;
+  font-size: 11px;
+}
+
+.compactPackageHeader strong {
+  color: #f3f5fa;
+  font-size: 15px;
+}
+
+.letterPackCard {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid rgba(101, 113, 255, 0.34);
+  border-radius: 14px;
+  background: rgba(101, 113, 255, 0.07);
+  padding: 14px;
+}
+
+.letterPackCard > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.letterPackCard strong {
+  font-size: 13px;
+}
+
+.letterPackCard small {
+  color: #8993a6;
+  font-size: 10px;
+}
+
+.letterPackCard .cardMessage {
+  grid-column: 1 / -1;
+}
+
+.inlineHint {
+  border-radius: 9px;
+  background: rgba(255, 183, 77, 0.08);
+  padding: 8px 10px;
+  color: #d2a75e;
+  font-size: 9px;
+  line-height: 1.4;
+}
+
+.packageAssignmentDetails {
+  border: 1px solid #293243;
+  border-radius: 12px;
+  background: #0a0f16;
+  overflow: hidden;
+}
+
+.packageAssignmentDetails > summary {
+  cursor: pointer;
+  padding: 11px 12px;
+  color: #aeb7c7;
+  font-size: 11px;
+  font-weight: 850;
+}
+
+.packageAssignmentDetails .packageItemAssignments {
+  border-top: 1px solid #252e3d;
+  padding: 12px;
+}
+
+.shippingWorkflow {
+  display: grid;
+  gap: 12px;
+}
+
+.shippingToolbar {
+  position: sticky;
+  top: 78px;
+  z-index: 6;
+  display: grid;
+  grid-template-columns: minmax(190px, 1fr) auto auto;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid #252e3d;
+  border-radius: 14px;
+  background: rgba(10, 14, 20, 0.96);
+  padding: 10px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
+  backdrop-filter: blur(12px);
+}
+
+.shippingSearch {
+  min-height: 42px;
+  min-width: 0;
+  border: 1px solid #2b3444;
+  border-radius: 10px;
+  outline: none;
+  background: #0b0f16;
+  padding: 0 12px;
+  color: #eef2f8;
+  font: inherit;
+  font-size: 12px;
+}
+
+.shippingSearch:focus {
+  border-color: #6571ff;
+  box-shadow: 0 0 0 3px rgba(101, 113, 255, 0.12);
+}
+
+.shippingFilters {
+  display: flex;
+  gap: 5px;
+}
+
+.filterButton,
+.filterButtonActive {
+  min-height: 38px;
+  border: 1px solid #2a3342;
+  border-radius: 999px;
+  background: #11161f;
+  padding: 0 11px;
+  color: #8792a5;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.filterButtonActive {
+  border-color: rgba(101, 113, 255, 0.58);
+  background: rgba(101, 113, 255, 0.15);
+  color: #d8ddff;
+}
+
+.shippingResultCount {
+  color: #778297;
+  font-size: 10px;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.shippingList {
+  display: grid;
+  gap: 8px;
+}
+
+.shippingWorkflowCard {
+  border: 1px solid #242d3b;
+  border-radius: 14px;
+  background: #0d1118;
+  overflow: hidden;
+}
+
+.shippingWorkflowCard[open] {
+  border-color: #35405a;
+  box-shadow: 0 10px 34px rgba(0, 0, 0, 0.18);
+}
+
+.shippingSummary {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.1fr) minmax(220px, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  cursor: pointer;
+  list-style: none;
+  padding: 13px 14px;
+}
+
+.shippingSummary::-webkit-details-marker {
+  display: none;
+}
+
+.shippingSummaryMain {
+  display: grid;
+  gap: 3px;
+}
+
+.shippingSummaryMain strong {
+  font-size: 14px;
+}
+
+.shippingSummaryMain span,
+.shippingSummaryPackage {
+  color: #7f899d;
+  font-size: 10px;
+}
+
+.shippingSummaryStatus {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 5px;
+}
+
+.shippingBody {
+  display: grid;
+  gap: 12px;
+  border-top: 1px solid #252e3d;
+  padding: 14px;
+}
+
+.shippingSection {
+  display: grid;
+  gap: 10px;
+  border: 1px solid #252e3d;
+  border-radius: 12px;
+  background: #090d13;
+  padding: 12px;
+}
+
+.shippingSectionHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.shippingSectionHeading > div {
+  display: grid;
+  gap: 3px;
+}
+
+.shippingSectionHeading strong {
+  font-size: 12px;
+}
+
+.shippingSectionHeading small {
+  color: #7d8799;
+  font-size: 9px;
+}
+
+.addressSummary {
+  display: grid;
+  gap: 3px;
+  border-radius: 10px;
+  background: #101620;
+  padding: 10px 11px;
+}
+
+.addressSummary > strong {
+  font-size: 11px;
+}
+
+.addressSummary > span {
+  color: #8993a5;
+  font-size: 10px;
+}
+
+.addressSummary > details {
+  margin-top: 6px;
+  border-top: 1px solid #252e3d;
+  padding-top: 7px;
+}
+
+.addressSummary > details > summary {
+  cursor: pointer;
+  color: #9ba6ba;
+  font-size: 9px;
+  font-weight: 850;
+}
+
+.shippingAddressGrid {
+  display: grid;
+  grid-template-columns: 1.4fr 0.8fr;
+  gap: 8px;
+  margin-top: 9px;
+}
+
+.shippingPackageList {
+  display: grid;
+  gap: 8px;
+}
+
+.shippingPackageRow {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) 160px auto;
+  align-items: end;
+  gap: 10px;
+  border-radius: 10px;
+  background: #101620;
+  padding: 10px;
+}
+
+.shippingPackageRow > div:first-child {
+  display: grid;
+  gap: 3px;
+}
+
+.shippingPackageRow > div:first-child strong {
+  font-size: 11px;
+}
+
+.shippingPackageRow > div:first-child span {
+  color: #8792a4;
+  font-size: 9px;
+}
+
+.shippingChargeField {
+  display: grid;
+  gap: 4px;
+}
+
+.shippingChargeField > span {
+  color: #8190a6;
+  font-size: 8px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.shippingRowActions {
+  display: flex;
+  gap: 6px;
+}
+
+.shippingRowActions button {
+  white-space: nowrap;
+}
+
+.smallTextLink {
+  color: #9ca7ff;
+  font-size: 9px;
+  font-weight: 850;
+  text-decoration: none;
+}
+
+@media (max-width: 900px) {
+  .shippingToolbar {
+    grid-template-columns: 1fr;
+    top: 74px;
+  }
+
+  .shippingFilters {
+    overflow-x: auto;
+  }
+
+  .shippingSummary {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .shippingSummaryPackage {
+    grid-column: 1;
+  }
+
+  .shippingSummaryStatus {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+
+  .shippingPackageRow {
+    grid-template-columns: 1fr 150px;
+  }
+
+  .shippingRowActions {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 620px) {
+  .tabs {
+    grid-template-columns: repeat(5, minmax(96px, 1fr));
+  }
+
+  .shippingSummary {
+    grid-template-columns: 1fr;
+  }
+
+  .shippingSummaryStatus {
+    grid-column: 1;
+    grid-row: auto;
+    justify-content: flex-start;
+  }
+
+  .shippingAddressGrid,
+  .shippingPackageRow {
+    grid-template-columns: 1fr;
+  }
+
+  .shippingRowActions {
+    flex-direction: column;
+  }
+
+  .letterPackCard {
+    grid-template-columns: 1fr;
   }
 }
