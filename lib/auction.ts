@@ -380,20 +380,54 @@ export async function getAuctionState(userId: string, requestedId?: number | nul
       b.package_status
     FROM auction_buyer b
     WHERE b.auction_id = ${auction.id}
+      AND EXISTS (
+        SELECT 1 FROM auction_item sold_item
+        WHERE sold_item.auction_id = b.auction_id
+          AND sold_item.buyer_id = b.id
+          AND sold_item.status = 'sold'
+      )
       AND NOT EXISTS (
         SELECT 1 FROM auction_package p WHERE p.buyer_id = b.id
       )
     ON CONFLICT (buyer_id, package_number) DO NOTHING
   `)
 
+  // A live bidder or a corrected winner is not a packing assignment. Remove
+  // stale links before loading package contents; never change the sale itself.
+  await db.execute(sql`
+    UPDATE auction_item i
+    SET package_id = NULL
+    WHERE i.auction_id = ${auction.id}
+      AND i.package_id IS NOT NULL
+      AND (
+        i.status <> 'sold'
+        OR i.buyer_id IS NULL
+        OR NOT EXISTS (
+          SELECT 1
+          FROM auction_package p
+          JOIN auction_buyer b ON b.id = p.buyer_id
+          WHERE p.id = i.package_id
+            AND p.buyer_id = i.buyer_id
+            AND b.auction_id = i.auction_id
+        )
+      )
+  `)
+
+  // Automatic placement is safe only for a completed sale whose buyer has
+  // exactly one package. Multiple packages remain an explicit packing choice.
   await db.execute(sql`
     UPDATE auction_item i
     SET package_id = p.id
     FROM auction_package p
     WHERE i.auction_id = ${auction.id}
+      AND i.status = 'sold'
       AND i.buyer_id = p.buyer_id
       AND p.package_number = 1
       AND i.package_id IS NULL
+      AND EXISTS (
+        SELECT 1 FROM auction_buyer b
+        WHERE b.id = i.buyer_id AND b.auction_id = i.auction_id
+      )
       AND NOT EXISTS (
         SELECT 1
         FROM auction_package p2
