@@ -2330,3 +2330,10 @@
     justify-items: start;
   }
 }
+
+
+.itemLine em {
+  color: #8f9aaf;
+  font-style: normal;
+  font-weight: 850;
+}

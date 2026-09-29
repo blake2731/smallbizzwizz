@@ -154,7 +154,7 @@ export default async function AuctionPage({
             <p className={styles.kicker}>The Crafty Brother · Auction Console</p>
             <div className={styles.titleRow}>
               <h1 className={styles.title}>{auction.title}</h1>
-              <span className={styles.stageBadge}>{stageLabel(auction.status)}</span>
+              <span className={styles.stageBadge}>{view === 'shipping' ? 'Shipping' : view === 'invoice' ? 'Invoicing' : stageLabel(auction.status)}</span>
             </div>
             <p className={styles.subtitle}>
               {new Intl.DateTimeFormat('en-US', {
@@ -355,8 +355,18 @@ export default async function AuctionPage({
                   Work one buyer at a time. Addresses and shipping charges live here; package measurements are shown as read-only summaries from Pack.
                 </p>
               </div>
-              <div className={styles.progressText}>
-                {shippingReadyCount} of {metrics.buyerCount} ready to invoice
+              <div className={styles.packHeaderActions}>
+                <a
+                  className={styles.printPackingLink}
+                  href="https://ship.pirateship.com/"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Open Pirate Ship
+                </a>
+                <div className={styles.progressText}>
+                  {shippingReadyCount} of {metrics.buyerCount} ready to invoice
+                </div>
               </div>
             </div>
             <ShippingWorkflow
