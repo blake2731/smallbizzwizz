@@ -129,18 +129,25 @@ async function getOrCreateBuyer(auctionId: number, rawName: string) {
 async function cleanupBuyerIfUnused(buyerId: number | null) {
   if (!buyerId) return
 
-  const remaining = await db
-    .select({ id: auctionItem.id })
-    .from(auctionItem)
-    .where(
-      and(
-        eq(auctionItem.buyerId, buyerId),
-        ne(auctionItem.status, 'void'),
-      ),
-    )
-    .limit(1)
+  const [remainingItems, retainedBids] = await Promise.all([
+    db
+      .select({ id: auctionItem.id })
+      .from(auctionItem)
+      .where(
+        and(
+          eq(auctionItem.buyerId, buyerId),
+          ne(auctionItem.status, 'void'),
+        ),
+      )
+      .limit(1),
+    db
+      .select({ id: auctionBid.id })
+      .from(auctionBid)
+      .where(eq(auctionBid.buyerId, buyerId))
+      .limit(1),
+  ])
 
-  if (!remaining.length) {
+  if (!remainingItems.length && !retainedBids.length) {
     await db.delete(auctionBuyer).where(eq(auctionBuyer.id, buyerId))
   }
 }
