@@ -9,6 +9,7 @@ import {
 import LiveEntry from './LiveEntry'
 import BuyerCard from './BuyerCard'
 import ShippingWorkflow from './ShippingWorkflow'
+import InvoiceWorkflow from './InvoiceWorkflow'
 import ActivityItem from './ActivityItem'
 import { getAuctionList, getAuctionState, money } from '@/lib/auction'
 import { ensureLatestAuctionPreview } from '@/lib/auction-preview-seed'
@@ -402,22 +403,20 @@ export default async function AuctionPage({
               <div>
                 <p className={styles.kicker}>Collect payment</p>
                 <h2>Invoices</h2>
-                <p>
-                  The final amount appears only after shipping exists. Messenger works now; customer
-                  email is captured here for the Shopify lane.
-                </p>
+                <p>Open one buyer at a time. Buyers without a shipping charge stay clearly blocked from invoicing.</p>
               </div>
               <div className={styles.progressText}>
                 {metrics.invoicedCount} sent · {metrics.paidCount} paid
               </div>
             </div>
-            <div className={styles.cardGrid}>
-              {invoiceBuyers.map((buyer) => (
-                <BuyerCard key={buyer.id} auctionId={auction.id} auctionTitle={auction.title} buyer={buyer} mode="invoice" />
-              ))}
-            </div>
+            <InvoiceWorkflow
+              auctionId={auction.id}
+              auctionTitle={auction.title}
+              buyers={invoiceBuyers}
+            />
           </section>
         ) : null}
+
       </div>
     </main>
   )

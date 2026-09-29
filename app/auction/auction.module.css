@@ -2279,3 +2279,54 @@
     grid-template-columns: 1fr;
   }
 }
+
+
+.invoiceWorkflow {
+  display: grid;
+  gap: 12px;
+}
+
+.invoiceWorkflowCard {
+  border: 1px solid #242d3b;
+  border-radius: 14px;
+  background: #0d1118;
+  overflow: hidden;
+}
+
+.invoiceWorkflowCard[open] {
+  border-color: #35405a;
+}
+
+.invoiceSummaryTotal {
+  display: grid;
+  justify-items: end;
+  gap: 2px;
+}
+
+.invoiceSummaryTotal span {
+  color: #7f899d;
+  font-size: 8px;
+  font-weight: 850;
+  text-transform: uppercase;
+}
+
+.invoiceSummaryTotal strong {
+  font-size: 15px;
+}
+
+.invoiceWorkflowBody {
+  border-top: 1px solid #252e3d;
+  padding: 10px;
+}
+
+.invoiceWorkflowBody .buyerCard {
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+@media (max-width: 760px) {
+  .invoiceSummaryTotal {
+    justify-items: start;
+  }
+}
