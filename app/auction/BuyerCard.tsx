@@ -16,6 +16,7 @@ import {
   setBuyerPrivateGroupAction,
 } from './actions'
 import BuyerPackagesEditor from './BuyerPackagesEditor'
+import BuyerPackagePackingEditor from './BuyerPackagePackingEditor'
 import styles from './auction.module.css'
 
 type Item = {
@@ -120,7 +121,7 @@ export default function BuyerCard({
   auctionId: number
   auctionTitle: string
   buyer: Buyer
-  mode: 'buyers' | 'pack' | 'invoice'
+  mode: 'buyers' | 'pack' | 'shipping' | 'invoice'
 }) {
   const router = useRouter()
   const [email, setEmail] = useState(buyer.email ?? buyer.shippingProfile?.email ?? '')
@@ -432,6 +433,17 @@ export default function BuyerCard({
       ) : null}
 
       {mode === 'pack' ? (
+        <div className={styles.buyerControls}>
+          <BuyerPackagePackingEditor
+            auctionId={auctionId}
+            buyerId={buyer.id}
+            packages={buyer.packages}
+            items={buyer.items}
+          />
+        </div>
+      ) : null}
+
+      {mode === 'shipping' ? (
         <div className={styles.buyerControls}>
           <div className={styles.shippingProfilePanel}>
             <div className={styles.packSectionTitle}>

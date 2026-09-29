@@ -28,6 +28,7 @@ const VIEWS = [
   ['live', 'Live'],
   ['buyers', 'Buyers'],
   ['pack', 'Pack'],
+  ['shipping', 'Shipping'],
   ['invoice', 'Invoice'],
 ] as const
 
@@ -310,7 +311,7 @@ export default async function AuctionPage({
               <div>
                 <p className={styles.kicker}>After the live</p>
                 <h2>Packaging</h2>
-                <p>Save the customer address, weigh and measure the package, then move it into shipping.</p>
+                <p>Pack each buyer, enter weight and dimensions, and add another box only when needed.</p>
               </div>
               <div className={styles.packHeaderActions}>
                 <Link
@@ -319,6 +320,28 @@ export default async function AuctionPage({
                 >
                   🖨 Print packing list
                 </Link>
+                <div className={styles.progressText}>
+                  {metrics.packedCount} of {metrics.buyerCount} packed
+                </div>
+              </div>
+            </div>
+            <div className={styles.cardGrid}>
+              {packBuyers.map((buyer) => (
+                <BuyerCard key={buyer.id} auctionId={auction.id} auctionTitle={auction.title} buyer={buyer} mode="pack" />
+              ))}
+            </div>
+          </section>
+        ) : null}
+
+        {view === 'shipping' ? (
+          <section>
+            <div className={styles.viewHeader}>
+              <div>
+                <p className={styles.kicker}>After packing</p>
+                <h2>Shipping</h2>
+                <p>Add or confirm the customer address, then enter the individual shipping charge before invoicing.</p>
+              </div>
+              <div className={styles.packHeaderActions}>
                 <a
                   className={styles.printPackingLink}
                   href={'/auction/pirate-ship?auction=' + auction.id}
@@ -332,7 +355,7 @@ export default async function AuctionPage({
             </div>
             <div className={styles.cardGrid}>
               {packBuyers.map((buyer) => (
-                <BuyerCard key={buyer.id} auctionId={auction.id} auctionTitle={auction.title} buyer={buyer} mode="pack" />
+                <BuyerCard key={buyer.id} auctionId={auction.id} auctionTitle={auction.title} buyer={buyer} mode="shipping" />
               ))}
             </div>
           </section>
