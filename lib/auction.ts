@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, ne, sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import {
+  auctionBid,
   auctionBuyer,
   auctionCustomerPreference,
   auctionCustomerProfile,
@@ -282,6 +283,25 @@ export async function ensureAuctionSchema() {
         CREATE INDEX IF NOT EXISTS auction_item_auction_status_idx
         ON auction_item (auction_id, status)
       `)
+
+      await db.execute(sql`
+        CREATE TABLE IF NOT EXISTS auction_bid (
+          id serial PRIMARY KEY,
+          auction_id integer NOT NULL REFERENCES auction_session(id) ON DELETE CASCADE,
+          item_id integer NOT NULL REFERENCES auction_item(id) ON DELETE CASCADE,
+          buyer_id integer NOT NULL REFERENCES auction_buyer(id) ON DELETE CASCADE,
+          amount_cents integer NOT NULL,
+          created_at timestamptz NOT NULL DEFAULT now()
+        )
+      `)
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS auction_bid_item_created_idx
+        ON auction_bid (item_id, created_at)
+      `)
+      await db.execute(sql`
+        CREATE INDEX IF NOT EXISTS auction_bid_buyer_created_idx
+        ON auction_bid (buyer_id, created_at)
+      `)
     })().catch((error) => {
       schemaReady = null
       throw error
@@ -458,7 +478,7 @@ export async function getAuctionState(userId: string, requestedId?: number | nul
       .innerJoin(auctionSession, eq(auctionBuyer.auctionId, auctionSession.id))
       .where(eq(auctionSession.userId, userId))
       .orderBy(desc(auctionBuyer.updatedAt))
-      .limit(150),
+      .limit(500),
     db
       .select()
       .from(auctionCustomerPreference)
@@ -526,7 +546,7 @@ export async function getAuctionState(userId: string, requestedId?: number | nul
         normalizedName: buyer.normalizedName,
       })
     }
-    if (knownBuyerMap.size >= 24) break
+    if (knownBuyerMap.size >= 120) break
   }
 
   const items: AuctionItemView[] = [...allItems]

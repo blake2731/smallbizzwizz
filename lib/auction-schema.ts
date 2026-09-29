@@ -191,9 +191,32 @@ export const auctionItem = pgTable(
   ],
 )
 
+export const auctionBid = pgTable(
+  'auction_bid',
+  {
+    id: serial('id').primaryKey(),
+    auctionId: integer('auction_id')
+      .notNull()
+      .references(() => auctionSession.id, { onDelete: 'cascade' }),
+    itemId: integer('item_id')
+      .notNull()
+      .references(() => auctionItem.id, { onDelete: 'cascade' }),
+    buyerId: integer('buyer_id')
+      .notNull()
+      .references(() => auctionBuyer.id, { onDelete: 'cascade' }),
+    amountCents: integer('amount_cents').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => [
+    index('auction_bid_item_created_idx').on(t.itemId, t.createdAt),
+    index('auction_bid_buyer_created_idx').on(t.buyerId, t.createdAt),
+  ],
+)
+
 export type AuctionSession = typeof auctionSession.$inferSelect
 export type AuctionBuyer = typeof auctionBuyer.$inferSelect
 export type AuctionCustomerProfile = typeof auctionCustomerProfile.$inferSelect
 export type AuctionCustomerPreference = typeof auctionCustomerPreference.$inferSelect
 export type AuctionPackage = typeof auctionPackage.$inferSelect
 export type AuctionItem = typeof auctionItem.$inferSelect
+export type AuctionBid = typeof auctionBid.$inferSelect

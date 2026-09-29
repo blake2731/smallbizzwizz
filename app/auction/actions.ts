@@ -8,6 +8,7 @@ import { db } from '@/lib/db'
 import { shopifyGraphql } from '@/lib/shopify-admin'
 import { resolveShippoOriginAddressId, shippoRequest } from '@/lib/shippo'
 import {
+  auctionBid,
   auctionBuyer,
   auctionCustomerPreference,
   auctionCustomerProfile,
@@ -278,6 +279,13 @@ export async function updateAuctionHighBidAction(input: {
   const buyer = await getOrCreateBuyer(input.auctionId, input.buyerName)
   const previousBuyerId = item.buyerId
 
+  await db.insert(auctionBid).values({
+    auctionId: input.auctionId,
+    itemId: item.id,
+    buyerId: buyer.id,
+    amountCents: bidCents,
+  })
+
   let backupBidderName = item.backupBidderName
   let backupBidCents = item.backupBidCents
 
@@ -305,10 +313,8 @@ export async function updateAuctionHighBidAction(input: {
     })
     .where(eq(auctionItem.id, item.id))
 
-  if (previousBuyerId && previousBuyerId !== buyer.id) {
-    await cleanupBuyerIfUnused(previousBuyerId)
-  }
-
+  // Keep outbid participants in the auction buyer pool so they remain searchable
+  // and available for future lots. Bid amounts are retained in auction_bid.
   await touchAuction(input.auctionId)
   revalidatePath('/auction')
   return { ok: true }
