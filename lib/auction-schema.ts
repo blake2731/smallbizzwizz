@@ -137,6 +137,7 @@ export const auctionPackage = pgTable(
       .notNull()
       .references(() => auctionBuyer.id, { onDelete: 'cascade' }),
     packageNumber: integer('package_number').notNull().default(1),
+    packagingType: text('packaging_type').$type<'box' | 'envelope'>().notNull().default('box'),
     weightOunces: integer('weight_ounces'),
     lengthHundredths: integer('length_hundredths'),
     widthHundredths: integer('width_hundredths'),

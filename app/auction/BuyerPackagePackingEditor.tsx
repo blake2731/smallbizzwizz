@@ -13,6 +13,7 @@ import styles from './auction.module.css'
 type Package = {
   id: number
   packageNumber: number
+  packagingType: 'box' | 'envelope'
   weightOunces: number | null
   lengthHundredths: number | null
   widthHundredths: number | null
@@ -117,6 +118,7 @@ function PackageCard({
   const [length, setLength] = useState(dimensionValue(pkg.lengthHundredths))
   const [width, setWidth] = useState(dimensionValue(pkg.widthHundredths))
   const [height, setHeight] = useState(dimensionValue(pkg.heightHundredths))
+  const [packagingType, setPackagingType] = useState<'box' | 'envelope'>(pkg.packagingType)
 
   const pounds = Number(weightPounds || 0)
   const ounces = Number(weightOunces || 0)
@@ -139,11 +141,11 @@ function PackageCard({
     validWeight &&
     validDimension(length) &&
     validDimension(width) &&
-    validDimension(height)
+    (packagingType === 'envelope' || validDimension(height))
 
   function savePackage() {
     if (!complete) {
-      setMessage('Enter the package weight and all three dimensions.')
+      setMessage(packagingType === 'envelope' ? 'Enter weight, length, and width.' : 'Enter weight, length, width, and height.')
       return
     }
 
@@ -163,6 +165,7 @@ function PackageCard({
             width,
             height,
             mailingMode: 'parcel',
+            packagingType,
           })
           setMessage('Package saved and marked packed.')
           router.refresh()
@@ -197,7 +200,7 @@ function PackageCard({
       <div className={styles.packSectionTitle}>
         <div>
           <strong>Package {pkg.packageNumber}</strong>
-          <small>Finished weight and outside dimensions.</small>
+          <small>{packagingType === 'envelope' ? 'Measure the empty envelope before filling it.' : 'Finished weight and outside dimensions.'}</small>
         </div>
         {pkg.status === 'packed' ? (
           <span className={styles.profileStatus}>Packed</span>
@@ -205,6 +208,15 @@ function PackageCard({
           <span className={styles.profileStatusMuted}>Needs packing</span>
         )}
       </div>
+
+      <label className={styles.fieldGroup}>
+        <span>Packaging</span>
+        <select className={styles.compactInput} value={packagingType} disabled={pending}
+          onChange={event => setPackagingType(event.target.value as 'box' | 'envelope')}>
+          <option value="box">Box or rigid packaging</option>
+          <option value="envelope">Envelope, padded envelope, or soft pack</option>
+        </select>
+      </label>
 
       <div className={styles.packageMeasureGrid}>
         <label className={styles.fieldGroup}>
@@ -251,7 +263,7 @@ function PackageCard({
             disabled={pending}
           />
         </label>
-        <label className={styles.fieldGroup}>
+        {packagingType === 'box' ? <label className={styles.fieldGroup}>
           <span>Height</span>
           <input
             className={styles.compactInput}
@@ -261,11 +273,11 @@ function PackageCard({
             placeholder="in"
             disabled={pending}
           />
-        </label>
+        </label> : null}
       </div>
 
       {!complete && (weightPounds || weightOunces || length || width || height) ? (
-        <div className={styles.inlineHint}>Weight must be positive, ounces 0–15, and all dimensions greater than 0.</div>
+        <div className={styles.inlineHint}>Enter positive weight and dimensions. Ounces must be between 0 and 15.</div>
       ) : null}
 
       <div className={styles.packageActions}>

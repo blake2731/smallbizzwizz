@@ -12,6 +12,7 @@ import styles from './auction.module.css'
 type ShippingPackage = {
   id: number
   packageNumber: number
+  packagingType: 'box' | 'envelope'
   weightOunces: number | null
   lengthHundredths: number | null
   widthHundredths: number | null
@@ -70,9 +71,11 @@ function packageLabel(pkg: ShippingPackage, letterOnly: boolean) {
     return 'Letter + 2 stamps'
   }
 
-  const dims = [dimension(pkg.lengthHundredths), dimension(pkg.widthHundredths), dimension(pkg.heightHundredths)]
+  const dims = pkg.packagingType === 'envelope'
+    ? [dimension(pkg.lengthHundredths), dimension(pkg.widthHundredths)]
+    : [dimension(pkg.lengthHundredths), dimension(pkg.widthHundredths), dimension(pkg.heightHundredths)]
   const dimensions = dims.every(Boolean) ? dims.join(' × ') + ' in' : 'Dimensions missing'
-  return weightLabel(pkg.weightOunces) + ' · ' + dimensions
+  return (pkg.packagingType === 'envelope' ? 'Envelope · ' : 'Box · ') + weightLabel(pkg.weightOunces) + ' · ' + dimensions
 }
 
 function BuyerShippingCard({
@@ -166,6 +169,7 @@ function BuyerShippingCard({
             length: dimension(pkg.lengthHundredths) ?? '',
             width: dimension(pkg.widthHundredths) ?? '',
             height: dimension(pkg.heightHundredths) ?? '',
+            packagingType: pkg.packagingType,
             mailingMode: letterOnly ? 'letter' : 'parcel',
           })
           setMessage('Shipping saved.')

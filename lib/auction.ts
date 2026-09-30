@@ -162,6 +162,7 @@ export async function ensureAuctionSchema() {
           id serial PRIMARY KEY,
           buyer_id integer NOT NULL REFERENCES auction_buyer(id) ON DELETE CASCADE,
           package_number integer NOT NULL DEFAULT 1,
+          packaging_type text NOT NULL DEFAULT 'box',
           weight_ounces integer,
           length_hundredths integer,
           width_hundredths integer,
@@ -182,6 +183,7 @@ export async function ensureAuctionSchema() {
           updated_at timestamptz NOT NULL DEFAULT now()
         )
       `)
+      await db.execute(sql`ALTER TABLE auction_package ADD COLUMN IF NOT EXISTS packaging_type text NOT NULL DEFAULT 'box'`)
       await db.execute(sql`
         CREATE UNIQUE INDEX IF NOT EXISTS auction_package_buyer_number_unique
         ON auction_package (buyer_id, package_number)

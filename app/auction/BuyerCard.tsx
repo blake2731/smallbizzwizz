@@ -63,6 +63,7 @@ type Buyer = {
   packages: Array<{
     id: number
     packageNumber: number
+    packagingType: 'box' | 'envelope'
     weightOunces: number | null
     lengthHundredths: number | null
     widthHundredths: number | null

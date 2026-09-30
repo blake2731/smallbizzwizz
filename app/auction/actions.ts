@@ -1,10 +1,11 @@
 'use server'
 
 import { auth } from '@clerk/nextjs/server'
-import { and, desc, eq, ne } from 'drizzle-orm'
+import { and, desc, eq, isNull, ne } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { db } from '@/lib/db'
+import { assertPirateShipPackageMatches, PirateShipQuoteError, validatePirateShipQuote } from '@/lib/pirate-ship-quote'
 import { shopifyGraphql } from '@/lib/shopify-admin'
 import { resolveShippoOriginAddressId, shippoRequest } from '@/lib/shippo'
 import {
@@ -541,6 +542,53 @@ async function requireBuyerPackage(
   return pkg
 }
 
+export async function savePirateShipQuoteAction(rawQuote: unknown) {
+  try {
+    const quote = validatePirateShipQuote(rawQuote)
+    const userId = await currentUserId()
+    await requireAuction(userId, quote.auctionId)
+    let pkg = await requireBuyerPackage(quote.auctionId, quote.buyerId, quote.packageId)
+    assertPirateShipPackageMatches(quote, pkg)
+
+    if (pkg.shippingCents === null) {
+      const [saved] = await db.update(auctionPackage).set({
+        shippingCents: quote.amountCents,
+        shippoShipmentId: null, shippoRateId: null,
+        shippoProvider: quote.provider, shippoService: quote.service || 'Pirate Ship quote',
+        shippoRateCents: quote.amountCents, shippoQuotedAt: new Date(), updatedAt: new Date(),
+      }).where(and(
+        eq(auctionPackage.id, quote.packageId), eq(auctionPackage.buyerId, quote.buyerId),
+        eq(auctionPackage.packageNumber, quote.packageNumber), eq(auctionPackage.status, 'packed'),
+        eq(auctionPackage.packagingType, quote.packagingType),
+        eq(auctionPackage.weightOunces, quote.weightOunces),
+        eq(auctionPackage.lengthHundredths, quote.lengthHundredths),
+        eq(auctionPackage.widthHundredths, quote.widthHundredths),
+        quote.heightHundredths === null ? isNull(auctionPackage.heightHundredths) : eq(auctionPackage.heightHundredths, quote.heightHundredths),
+        isNull(auctionPackage.shippingCents), isNull(auctionPackage.shippoTransactionId),
+        isNull(auctionPackage.shippoLabelUrl),
+      )).returning()
+      pkg = saved || await requireBuyerPackage(quote.auctionId, quote.buyerId, quote.packageId)
+      assertPirateShipPackageMatches(quote, pkg)
+      if (pkg.shippingCents !== quote.amountCents) {
+        throw new PirateShipQuoteError('The box changed while saving. Review it in the app and try again.')
+      }
+    }
+
+    // Retrying an acknowledged or interrupted save also repairs its buyer summary.
+    await syncBuyerPackageSummary(quote.buyerId)
+    await touchAuction(quote.auctionId)
+    const [buyer] = await db.select({ name: auctionBuyer.displayName, shippingCents: auctionBuyer.shippingCents })
+      .from(auctionBuyer).where(eq(auctionBuyer.id, quote.buyerId)).limit(1)
+    revalidatePath('/auction')
+    return { ok: true as const, packageId: pkg.id, packageNumber: pkg.packageNumber,
+      buyer: buyer?.name || 'Buyer', amountCents: quote.amountCents,
+      buyerShippingCents: buyer?.shippingCents ?? null }
+  } catch (error) {
+    return { ok: false as const, error: error instanceof PirateShipQuoteError
+      ? error.message : 'The shipping quote could not be saved. Check your app connection and try again.' }
+  }
+}
+
 export async function addAuctionPackageAction(input: {
   auctionId: number
   buyerId: number
@@ -665,11 +713,14 @@ export async function saveAuctionPackageAction(input: {
   width: string
   height: string
   mailingMode?: 'parcel' | 'letter'
+  packagingType?: 'box' | 'envelope'
 }) {
   const userId = await currentUserId()
   await requireAuction(userId, input.auctionId)
   const current = await requireBuyerPackage(input.auctionId, input.buyerId, input.packageId)
   const mailingMode = input.mailingMode ?? 'parcel'
+  const packagingType = mailingMode === 'letter' ? 'envelope' : (input.packagingType ?? current.packagingType)
+  if (packagingType !== 'box' && packagingType !== 'envelope') throw new Error('Choose Box or Envelope.')
 
   const shippingCents = input.shipping.trim() ? parseMoneyToCents(input.shipping) : null
   if (input.shipping.trim() && shippingCents === null) {
@@ -697,7 +748,7 @@ export async function saveAuctionPackageAction(input: {
   const widthHundredths =
     mailingMode === 'letter' ? null : parseDimensionHundredths(input.width, 'Width')
   const heightHundredths =
-    mailingMode === 'letter' ? null : parseDimensionHundredths(input.height, 'Height')
+    mailingMode === 'letter' || packagingType === 'envelope' ? null : parseDimensionHundredths(input.height, 'Height')
 
   if (input.packed && mailingMode === 'parcel') {
     if (!totalWeightOunces || totalWeightOunces <= 0) {
@@ -706,13 +757,14 @@ export async function saveAuctionPackageAction(input: {
     if (
       lengthHundredths === null ||
       widthHundredths === null ||
-      heightHundredths === null
+      (packagingType === 'box' && heightHundredths === null)
     ) {
-      throw new Error('Enter all three package dimensions before marking it packed')
+      throw new Error('Enter the required package dimensions before marking it packed')
     }
   }
 
   const measurementsChanged =
+    current.packagingType !== packagingType ||
     current.weightOunces !== totalWeightOunces ||
     current.lengthHundredths !== lengthHundredths ||
     current.widthHundredths !== widthHundredths ||
@@ -750,6 +802,7 @@ export async function saveAuctionPackageAction(input: {
     .update(auctionPackage)
     .set({
       shippingCents,
+      packagingType,
       weightOunces: totalWeightOunces,
       lengthHundredths,
       widthHundredths,

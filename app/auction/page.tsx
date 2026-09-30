@@ -395,6 +395,7 @@ export default async function AuctionPage({
                 packages: buyer.packages.map((pkg) => ({
                   id: pkg.id,
                   packageNumber: pkg.packageNumber,
+                  packagingType: pkg.packagingType,
                   weightOunces: pkg.weightOunces,
                   lengthHundredths: pkg.lengthHundredths,
                   widthHundredths: pkg.widthHundredths,
