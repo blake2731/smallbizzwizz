@@ -38,7 +38,10 @@ export default clerkMiddleware(async (auth, request) => {
         return NextResponse.next()
     }
 
-    if (!isPublicRoute(request)) {
+    const isAuctionPreview =
+        process.env.VERCEL_ENV === 'preview' && pathname.startsWith('/auction')
+
+    if (!isPublicRoute(request) && !isAuctionPreview) {
         await auth.protect()
     }
 })
