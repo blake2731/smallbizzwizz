@@ -5,5 +5,5 @@
       "feature/private-invoices": false
     }
   },
-  "buildCommand": "node scripts/verify-sandbox-database.cjs && next build --webpack"
+  "buildCommand": "node scripts/verify-sandbox-database.cjs && node scripts/inspect-clerk-public-config.cjs && next build --webpack"
 }
