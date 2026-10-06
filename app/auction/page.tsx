@@ -16,6 +16,7 @@ import BillReviewPanel from './BillReviewPanel'
 import { getAuctionList, getAuctionState, money } from '@/lib/auction'
 import { ensureLatestAuctionPreview } from '@/lib/auction-preview-seed'
 import styles from './auction.module.css'
+import { GET as readSandboxStatus } from '../api/sandbox-status/route'
 
 export const metadata: Metadata = {
   title: 'Auction Console | The Crafty Brother',
@@ -75,6 +76,22 @@ export default async function AuctionPage({
 
   if (!userId) redirect('/sign-in')
 
+  let sandboxStatusPanel = null
+  if (privateBills && process.env.VERCEL_ENV === 'preview' && process.env.VERCEL_GIT_COMMIT_REF === 'feature/private-invoices') {
+    const response = await readSandboxStatus()
+    if (response.ok) {
+      const status = await response.json()
+      sandboxStatusPanel = <aside aria-label="Private invoice test status">
+        <h2>Private invoice test status</h2>
+        <p>Test owner: {status.owner}</p>
+        <p>Database: {status.database}</p>
+        <p>PayPal checkout: {status.paypalEnabled ? 'Enabled' : 'Disabled'}; payment writes: {status.paypalWritesEnabled ? 'Enabled' : 'Disabled'}</p>
+      </aside>
+    } else {
+      sandboxStatusPanel = <aside aria-label="Private invoice test status">Test database verification unavailable. Payment testing remains paused.</aside>
+    }
+  }
+
   const params = await searchParams
   const auctionParam = Array.isArray(params.auction) ? params.auction[0] : params.auction
   const requestedAuctionId = auctionParam ? Number.parseInt(auctionParam, 10) : null
@@ -95,6 +112,7 @@ export default async function AuctionPage({
   if (!state) {
     return (
       <main className={styles.shell}>
+        {sandboxStatusPanel}
         <section className={styles.emptyStart}>
           <div className={styles.logoMark}>TCB</div>
           <p className={styles.kicker}>The Crafty Brother</p>
@@ -151,6 +169,7 @@ export default async function AuctionPage({
 
   return (
     <main className={styles.shell}>
+      {sandboxStatusPanel}
       <div className={styles.frame}>
         <header className={styles.topbar}>
           <div>
