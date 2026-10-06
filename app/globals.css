@@ -332,3 +332,6 @@ body {
   .sbw-hero-mark { padding: 10px; border-radius: 18px; margin-bottom: 1.5rem; }
   .sbw-preview-body { padding: 1rem !important; gap: 0.7rem !important; }
 }
+
+/* Packing page print reset must live outside a CSS Module. */
+@media print { html, body { margin: 0; padding: 0; background: white; } }

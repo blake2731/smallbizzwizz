@@ -1,7 +1,8 @@
 import { and, eq } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import { auctionBuyer, auctionItem, auctionSession } from '@/lib/auction-schema'
-import { ensureAuctionSchema, normalizeBuyerName } from '@/lib/auction'
+import { ensureAuctionSchema } from '@/lib/auction'
+import { resolveAuctionBuyer } from '@/lib/auction-customer'
 
 const PREVIEW_OWNER = 'auction-preview-owner'
 const TITLE = 'September 21, 2026 Auction'
@@ -104,17 +105,8 @@ export async function ensureLatestAuctionPreview(userId: string): Promise<number
   const buyerIdByName = new Map<string, number>()
 
   for (const name of names) {
-    const [buyer] = await db
-      .insert(auctionBuyer)
-      .values({
-        auctionId: auction.id,
-        displayName: name,
-        normalizedName: normalizeBuyerName(name),
-        privateGroup: name === 'Elaine Ressler',
-        packageStatus: 'unpacked',
-        invoiceStatus: 'not_ready',
-      })
-      .returning({ id: auctionBuyer.id, displayName: auctionBuyer.displayName })
+    const buyer = await resolveAuctionBuyer(userId, auction.id, name)
+    await db.update(auctionBuyer).set({ privateGroup: name === 'Elaine Ressler' }).where(eq(auctionBuyer.id, buyer.id))
 
     buyerIdByName.set(buyer.displayName, buyer.id)
   }
@@ -170,25 +162,8 @@ export async function resetLatestAuctionPreview(userId: string): Promise<number>
   const buyerIdByName = new Map<string, number>()
 
   for (const name of names) {
-    const [buyer] = await db
-      .insert(auctionBuyer)
-      .values({
-        auctionId,
-        displayName: name,
-        normalizedName: normalizeBuyerName(name),
-        privateGroup: name === 'Elaine Ressler',
-        shippingCents: null,
-        packageStatus: 'unpacked',
-        invoiceStatus: 'not_ready',
-        invoiceMethod: null,
-        shopifyDraftOrderId: null,
-        invoiceSentAt: null,
-        paymentMethod: null,
-        paymentTransactionId: null,
-        paidCents: null,
-        paidAt: null,
-      })
-      .returning({ id: auctionBuyer.id, displayName: auctionBuyer.displayName })
+    const buyer = await resolveAuctionBuyer(userId, auctionId, name)
+    await db.update(auctionBuyer).set({ privateGroup: name === 'Elaine Ressler' }).where(eq(auctionBuyer.id, buyer.id))
 
     buyerIdByName.set(buyer.displayName, buyer.id)
   }

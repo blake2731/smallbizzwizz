@@ -3,17 +3,21 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { editItemAction } from './actions'
+import { customerCue } from '@/lib/auction-entry-draft'
 import styles from './auction.module.css'
 
 type KnownBuyer = {
   id: number
   displayName: string
+  email: string | null
+  city: string | null
 }
 
 type Item = {
   id: number
   itemName: string
   buyerName: string | null
+  customerId: number | null
   priceCents: number
   saleType: 'quick' | 'auction' | 'legacy'
   status: 'open' | 'sold' | 'unsold' | 'void'
@@ -44,6 +48,7 @@ export default function ActivityItem({
   const [editing, setEditing] = useState(false)
   const [itemName, setItemName] = useState(item.itemName)
   const [buyerName, setBuyerName] = useState(item.buyerName ?? '')
+  const [customerId, setCustomerId] = useState<number | null>(item.customerId)
   const [price, setPrice] = useState((item.priceCents / 100).toFixed(2))
   const [status, setStatus] = useState<'open' | 'sold' | 'unsold'>(
     item.status === 'void' ? 'unsold' : item.status,
@@ -65,6 +70,7 @@ export default function ActivityItem({
             itemId: item.id,
             itemName,
             buyerName,
+            customerId,
             price,
             status,
             saleType: item.saleType,
@@ -143,7 +149,7 @@ export default function ActivityItem({
             <input
               className={styles.compactInput}
               value={buyerName}
-              onChange={(event) => setBuyerName(event.target.value)}
+              onChange={(event) => { setBuyerName(event.target.value); setCustomerId(null) }}
               placeholder="Buyer name"
               disabled={pending || status === 'unsold'}
             />
@@ -170,6 +176,7 @@ export default function ActivityItem({
               onClick={() => {
                 setStatus('unsold')
                 setBuyerName('')
+                setCustomerId(null)
               }}
             >
               Unsold
@@ -192,9 +199,9 @@ export default function ActivityItem({
                   type="button"
                   key={buyer.id + '-' + buyer.displayName}
                   className={styles.buyerChip}
-                  onClick={() => setBuyerName(buyer.displayName)}
+                  onClick={() => { setBuyerName(buyer.displayName); setCustomerId(buyer.id) }}
                 >
-                  {buyer.displayName}
+                  {buyer.displayName} · {customerCue(buyer)}
                 </button>
               ))}
             </div>

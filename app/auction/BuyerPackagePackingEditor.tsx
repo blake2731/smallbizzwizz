@@ -213,7 +213,7 @@ function PackageCard({
         <span>Packaging</span>
         <select className={styles.compactInput} value={packagingType} disabled={pending}
           onChange={event => setPackagingType(event.target.value as 'box' | 'envelope')}>
-          <option value="box">Box or rigid packaging</option>
+          <option value="box">Box, rigid, expandable or box-shaped bag</option>
           <option value="envelope">Envelope, padded envelope, or soft pack</option>
         </select>
       </label>

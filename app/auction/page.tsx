@@ -7,12 +7,12 @@ import {
   importRowsAction,
 } from './actions'
 import LiveEntry from './LiveEntry'
-import BuyerCard from './BuyerCard'
 import ShippingWorkflow from './ShippingWorkflow'
 import InvoiceWorkflow from './InvoiceWorkflow'
 import PackWorkflow from './PackWorkflow'
 import BuyerReviewWorkflow from './BuyerReviewWorkflow'
 import ActivityItem from './ActivityItem'
+import BillReviewPanel from './BillReviewPanel'
 import { getAuctionList, getAuctionState, money } from '@/lib/auction'
 import { ensureLatestAuctionPreview } from '@/lib/auction-preview-seed'
 import styles from './auction.module.css'
@@ -68,7 +68,8 @@ export default async function AuctionPage({
 }: {
   searchParams: Promise<{ auction?: string | string[]; view?: string | string[] }>
 }) {
-  const userId = process.env.VERCEL_ENV === 'preview'
+  const privateBills = process.env.AUCTION_PRIVATE_BILLS_ENABLED === 'true'
+  const userId = process.env.VERCEL_ENV === 'preview' && !privateBills
     ? 'auction-preview-owner'
     : (await auth()).userId
 
@@ -80,7 +81,7 @@ export default async function AuctionPage({
   const viewParam = Array.isArray(params.view) ? params.view[0] : params.view
   const view = VIEWS.some(([key]) => key === viewParam) ? viewParam! : 'live'
 
-  await ensureLatestAuctionPreview(userId)
+  if (!privateBills) await ensureLatestAuctionPreview(userId)
   const selectedAuctionId =
     requestedAuctionId && Number.isFinite(requestedAuctionId)
       ? requestedAuctionId
@@ -237,11 +238,9 @@ export default async function AuctionPage({
           <div className={styles.liveLayout}>
             <div>
               <LiveEntry
+                key={auction.id}
                 auctionId={auction.id}
-                recentBuyers={recentBuyers.map((buyer) => ({
-                  id: buyer.id,
-                  displayName: buyer.displayName,
-                }))}
+                recentBuyers={recentBuyers}
                 openLot={openLot ? {
                   id: openLot.id,
                   itemName: openLot.itemName,
@@ -366,6 +365,8 @@ export default async function AuctionPage({
                 >
                   Open Pirate Ship
                 </a>
+                <a className={styles.printPackingLink} href={'/auction/pirate-ship?auction=' + auction.id + '&packaging=box'}>Export boxes</a>
+                <a className={styles.printPackingLink} href={'/auction/pirate-ship?auction=' + auction.id + '&packaging=envelope'}>Export envelopes</a>
                 <div className={styles.progressText}>
                   {shippingReadyCount} of {metrics.buyerCount} ready to invoice
                 </div>
@@ -422,11 +423,14 @@ export default async function AuctionPage({
                 {metrics.invoicedCount} sent · {metrics.paidCount} paid
               </div>
             </div>
-            <InvoiceWorkflow
+            {privateBills ? <><p>Private buyer bills use separate reviewed snapshots and actual payment evidence. Sharing is manual.</p>
+              <a href={'/auction/billing/export?auction='+auction.id}>Download bill reconciliation CSV</a>
+              {invoiceBuyers.map(buyer=><BillReviewPanel key={buyer.id} auctionId={auction.id} buyerId={buyer.id} buyerName={buyer.displayName} />)}
+            </> : <InvoiceWorkflow
               auctionId={auction.id}
               auctionTitle={auction.title}
               buyers={invoiceBuyers}
-            />
+            />}
           </section>
         ) : null}
 

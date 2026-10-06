@@ -49,7 +49,7 @@ const rows = [
 ] as const
 
 export async function GET(request: Request) {
-  if (process.env.VERCEL_ENV !== 'preview') {
+  if (process.env.VERCEL_ENV !== 'preview' || process.env.AUCTION_PRIVATE_BILLS_ENABLED === 'true') {
     return new NextResponse('Preview only', { status: 404 })
   }
 

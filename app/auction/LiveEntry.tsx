@@ -2,7 +2,9 @@
 
 import { FormEvent, useEffect, useRef, useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { restoreEntryDraft, customerCue } from '@/lib/auction-entry-draft'
 import {
+  saveProspectiveCustomerAction,
   closeAuctionLotAction,
   recordSaleAction,
   recordUnsoldAction,
@@ -15,6 +17,10 @@ import styles from './auction.module.css'
 type KnownBuyer = {
   id: number
   displayName: string
+  email: string | null
+  city: string | null
+  phone: string | null
+  notes: string | null
 }
 
 type OpenLot = {
@@ -44,6 +50,8 @@ export default function LiveEntry({
   const itemRef = useRef<HTMLInputElement>(null)
   const buyerRef = useRef<HTMLInputElement>(null)
   const busyRef = useRef(false)
+  const contactQueueRef = useRef<Promise<unknown>>(Promise.resolve())
+  const contactKeyRef = useRef('')
   const [draftReady, setDraftReady] = useState(false)
   const [mode, setMode] = useState<'quick' | 'auction'>(openLot ? 'auction' : 'quick')
   const [itemName, setItemName] = useState('')
@@ -55,50 +63,146 @@ export default function LiveEntry({
   const [startingPrice, setStartingPrice] = useState('')
   const [bidderName, setBidderName] = useState('')
   const [bid, setBid] = useState('')
+  const [customerId, setCustomerId] = useState<number | null>(null)
+  const [bidderCustomerId, setBidderCustomerId] = useState<number | null>(null)
+  const [contactEmail, setContactEmail] = useState('')
+  const [contactPhone, setContactPhone] = useState('')
+  const [contactCity, setContactCity] = useState('')
+  const [contactNotes, setContactNotes] = useState('')
+  const [creationKey, setCreationKey] = useState('')
   const [message, setMessage] = useState('')
   const [pending, startTransition] = useTransition()
 
   useEffect(() => {
-    const storageKey = 'tcb-auction-draft-' + auctionId
+    let active = true
+    queueMicrotask(() => {
+      if (!active) return
     try {
-      const raw = window.localStorage.getItem(storageKey)
-      if (raw) {
-        const draft = JSON.parse(raw) as {
-          itemName?: string
-          buyerName?: string
-          price?: string
-          keepBuyer?: boolean
-          repeatSale?: boolean
-        }
-        setItemName(draft.itemName ?? '')
-        setBuyerName(draft.buyerName ?? '')
-        setPrice(draft.price ?? '')
-        setKeepBuyer(Boolean(draft.keepBuyer))
-        setRepeatSale(Boolean(draft.repeatSale))
-        if (draft.itemName || draft.buyerName || draft.price) {
-          setMessage('Draft restored.')
-        }
-      }
+      const draft = restoreEntryDraft(window.localStorage.getItem('tcb-auction-draft-' + auctionId))
+      setItemName(draft.itemName ?? '')
+      setBuyerName(draft.buyerName ?? '')
+      setPrice(draft.price ?? '')
+      setKeepBuyer(draft.keepBuyer ?? false)
+      setRepeatSale(draft.repeatSale ?? false)
+      setAuctionItemName(draft.auctionItemName ?? '')
+      setStartingPrice(draft.startingPrice ?? '')
+      setBidderName(draft.bidderName ?? '')
+      setBid(draft.bid ?? '')
+      setCustomerId(draft.customerId ?? null)
+      setBidderCustomerId(draft.bidderCustomerId ?? null)
+      setContactEmail(draft.contactEmail ?? '')
+      setContactPhone(draft.contactPhone ?? '')
+      setContactCity(draft.contactCity ?? '')
+      setContactNotes(draft.contactNotes ?? '')
+      const restoredKey = draft.creationKey || crypto.randomUUID()
+      contactKeyRef.current = restoredKey
+      setCreationKey(restoredKey)
+      if (draft.mode) setMode(draft.mode)
+      if (Object.keys(draft).length) setMessage('Draft restored. Saved customers remain in the customer list.')
     } catch {
-      window.localStorage.removeItem(storageKey)
-    } finally {
-      setDraftReady(true)
-    }
+      const restoredKey = crypto.randomUUID()
+      contactKeyRef.current = restoredKey
+      setCreationKey(restoredKey)
+      setMessage('Browser draft storage is unavailable. Save customer details before leaving.')
+    } finally { setDraftReady(true) }
+    })
+    return () => { active = false }
   }, [auctionId])
 
   useEffect(() => {
     if (!draftReady) return
-    const storageKey = 'tcb-auction-draft-' + auctionId
-    const hasDraft = Boolean(itemName || buyerName || price || keepBuyer || repeatSale)
-    if (!hasDraft) {
-      window.localStorage.removeItem(storageKey)
-      return
-    }
-    window.localStorage.setItem(
-      storageKey,
-      JSON.stringify({ itemName, buyerName, price, keepBuyer, repeatSale }),
-    )
-  }, [auctionId, buyerName, draftReady, itemName, keepBuyer, price, repeatSale])
+    try {
+      const pendingContacts = JSON.parse(window.localStorage.getItem('tcb-auction-contacts-' + auctionId) || '{}')
+      for (const input of Object.values(pendingContacts)) {
+        if (input && typeof input === 'object') void queueContact(input as Parameters<typeof saveProspectiveCustomerAction>[0])
+      }
+    } catch { /* A damaged queue must not stop entry. */ }
+    // Retry durable pending customer saves once on mount, including after interruption.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [auctionId, draftReady])
+
+  useEffect(() => {
+    if (!draftReady) return
+    try {
+      window.localStorage.setItem('tcb-auction-draft-' + auctionId, JSON.stringify({
+        itemName, buyerName, price, keepBuyer, repeatSale, auctionItemName, startingPrice,
+        bidderName, bid, customerId, bidderCustomerId, contactEmail, contactPhone,
+        contactCity, contactNotes, creationKey, mode,
+      }))
+    } catch { /* Server-saved customer details remain durable when browser storage fails. */ }
+  }, [auctionId, draftReady, itemName, buyerName, price, keepBuyer, repeatSale, auctionItemName,
+    startingPrice, bidderName, bid, customerId, bidderCustomerId, contactEmail, contactPhone,
+    contactCity, contactNotes, creationKey, mode])
+
+  function selectCustomer(customer: KnownBuyer, slot: 'quick' | 'auction') {
+    saveContactDraft()
+    if (slot === 'quick') { setBuyerName(customer.displayName); setCustomerId(customer.id) }
+    else { setBidderName(customer.displayName); setBidderCustomerId(customer.id) }
+    setContactEmail(customer.email ?? '')
+    setContactPhone(customer.phone ?? '')
+    setContactCity(customer.city ?? '')
+    setContactNotes(customer.notes ?? '')
+    const key = crypto.randomUUID(); contactKeyRef.current = key; setCreationKey(key)
+  }
+
+  function typeCustomer(name: string, slot: 'quick' | 'auction') {
+    if (contactEmail || contactPhone || contactCity || contactNotes) saveContactDraft()
+    if (slot === 'quick') { setBuyerName(name); setCustomerId(null) }
+    else { setBidderName(name); setBidderCustomerId(null) }
+    setContactEmail(''); setContactPhone(''); setContactCity(''); setContactNotes('')
+    const key = crypto.randomUUID(); contactKeyRef.current = key; setCreationKey(key)
+  }
+
+  function queueContact(input: Parameters<typeof saveProspectiveCustomerAction>[0]) {
+    const storageKey = 'tcb-auction-contacts-' + auctionId
+    const snapshot = { ...input, auctionId }
+    try {
+      const pendingContacts = JSON.parse(window.localStorage.getItem(storageKey) || '{}')
+      pendingContacts[snapshot.creationKey] = snapshot
+      window.localStorage.setItem(storageKey, JSON.stringify(pendingContacts))
+    } catch { /* Explicit save is still available if browser storage is blocked. */ }
+    const saved = contactQueueRef.current.catch(() => {}).then(async () => {
+      const result = await saveProspectiveCustomerAction(snapshot)
+      try {
+        const pendingContacts = JSON.parse(window.localStorage.getItem(storageKey) || '{}')
+        if (JSON.stringify(pendingContacts[snapshot.creationKey]) === JSON.stringify(snapshot)) {
+          delete pendingContacts[snapshot.creationKey]
+          window.localStorage.setItem(storageKey, JSON.stringify(pendingContacts))
+        }
+      } catch { /* Server save succeeded. */ }
+      if (contactKeyRef.current === snapshot.creationKey) {
+        if (mode === 'quick') setCustomerId(result.customerId)
+        else setBidderCustomerId(result.customerId)
+      }
+      router.refresh()
+      return result
+    })
+    contactQueueRef.current = saved
+    void saved.catch(() => setMessage('Customer draft kept in this browser. Save again when connected.'))
+    return saved
+  }
+
+  function saveContactDraft() {
+    const name = mode === 'quick' ? buyerName : bidderName
+    const selectedId = mode === 'quick' ? customerId : bidderCustomerId
+    if (!name.trim() || !creationKey) return
+    // Typing an existing name still requires selecting its stable identity. The
+    // explicit independent save can intentionally create a new same-name person.
+    if (!selectedId && recentBuyers.some(customer => customer.displayName.toLowerCase().startsWith(name.trim().toLowerCase()))) return
+    void queueContact({ auctionId, customerId: selectedId, creationKey, displayName: name,
+      email: contactEmail, phone: contactPhone, city: contactCity, notes: contactNotes })
+  }
+
+  function saveCustomer() {
+    const selectedId = mode === 'quick' ? customerId : bidderCustomerId
+    run(async () => {
+      const result = await queueContact({ auctionId, customerId: selectedId,
+        creationKey, displayName: mode === 'quick' ? buyerName : bidderName,
+        email: contactEmail, phone: contactPhone, city: contactCity, notes: contactNotes })
+      if (mode === 'quick') setCustomerId(result.customerId)
+      else setBidderCustomerId(result.customerId)
+    }, 'Customer saved. Contact and notes remain saved even with no sale.')
+  }
 
   function run(action: () => Promise<unknown>, successMessage: string, after?: () => void) {
     if (busyRef.current) return
@@ -107,6 +211,7 @@ export default function LiveEntry({
     startTransition(() => {
       void (async () => {
         try {
+          await contactQueueRef.current
           await action()
           after?.()
           setMessage(successMessage)
@@ -125,7 +230,7 @@ export default function LiveEntry({
       setItemName('')
       setPrice('')
     }
-    if (!keepBuyer) setBuyerName('')
+    if (!keepBuyer) { setBuyerName(''); setCustomerId(null); setContactEmail(''); setContactPhone(''); setContactCity(''); setContactNotes(''); setCreationKey(crypto.randomUUID()) }
 
     requestAnimationFrame(() => {
       if (repeatSale && !keepBuyer) {
@@ -137,20 +242,24 @@ export default function LiveEntry({
   }
 
   function clearQuickEntry() {
+    saveContactDraft()
     setItemName('')
     setBuyerName('')
+    setCustomerId(null)
+    setContactEmail(''); setContactPhone(''); setContactCity(''); setContactNotes('')
+    setCreationKey(crypto.randomUUID())
     setPrice('')
     setKeepBuyer(false)
     setRepeatSale(false)
     setMessage('Entry cleared.')
-    window.localStorage.removeItem('tcb-auction-draft-' + auctionId)
+    try { window.localStorage.removeItem('tcb-auction-draft-' + auctionId) } catch { /* optional browser draft */ }
     requestAnimationFrame(() => itemRef.current?.focus())
   }
 
   function sold(event: FormEvent) {
     event.preventDefault()
     run(
-      () => recordSaleAction({ auctionId, itemName, buyerName, price }),
+      () => recordSaleAction({ auctionId, itemName, buyerName, customerId, price }),
       buyerName.trim() ? 'Sold to ' + buyerName.trim() + '.' : 'Sale recorded.',
       resetQuick,
     )
@@ -173,6 +282,7 @@ export default function LiveEntry({
         setAuctionItemName('')
         setStartingPrice('')
         setBidderName('')
+        setBidderCustomerId(null)
         setBid('')
       },
     )
@@ -186,12 +296,14 @@ export default function LiveEntry({
         auctionId,
         itemId: openLot.id,
         buyerName: bidderName,
+        customerId: bidderCustomerId,
         bid,
       }),
       'High bid updated.',
       () => {
         setBid('')
         setBidderName('')
+        setBidderCustomerId(null)
       },
     )
   }
@@ -204,6 +316,7 @@ export default function LiveEntry({
       () => {
         setBid('')
         setBidderName('')
+        setBidderCustomerId(null)
       },
     )
   }
@@ -215,7 +328,7 @@ export default function LiveEntry({
     )
   }
 
-  function buyerChips(onSelect: (name: string) => void, query: string) {
+  function buyerChips(slot: 'quick' | 'auction', query: string) {
     if (!recentBuyers.length) return null
     const normalizedQuery = query.trim().toLowerCase()
     const visibleBuyers = (
@@ -233,10 +346,10 @@ export default function LiveEntry({
             key={buyer.id + '-' + buyer.displayName}
             className={styles.buyerChip}
             type="button"
-            onClick={() => onSelect(buyer.displayName)}
-            disabled={pending}
+            onClick={() => selectCustomer(buyer, slot)}
+            disabled={pending || !draftReady}
           >
-            {buyer.displayName}
+            {buyer.displayName} · {customerCue(buyer)}
           </button>
         ))}
       </div>
@@ -253,12 +366,12 @@ export default function LiveEntry({
           </h2>
         </div>
         <div className={styles.headerActions}>
-          {mode === 'quick' ? (
+      {mode === 'quick' ? (
             <button
               className={styles.clearEntryButton}
               type="button"
               onClick={clearQuickEntry}
-              disabled={pending}
+              disabled={pending || !draftReady}
             >
               Clear entry
             </button>
@@ -267,7 +380,7 @@ export default function LiveEntry({
             className={styles.undoButton}
             type="button"
             onClick={undo}
-            disabled={pending}
+            disabled={pending || !draftReady}
           >
             ↶ Undo last
           </button>
@@ -292,6 +405,16 @@ export default function LiveEntry({
         </button>
       </div>
 
+      <details className={styles.fieldGroup}>
+        <summary>Customer contact and notes</summary>
+        <p>Enter or select the customer below, then save these details even if they do not bid or win.</p>
+        <label>Email<input value={contactEmail} onBlur={saveContactDraft} onChange={e => setContactEmail(e.target.value)} disabled={pending || !draftReady} /></label>
+        <label>Phone<input value={contactPhone} onBlur={saveContactDraft} onChange={e => setContactPhone(e.target.value)} disabled={pending || !draftReady} /></label>
+        <label>City<input value={contactCity} onBlur={saveContactDraft} onChange={e => setContactCity(e.target.value)} disabled={pending || !draftReady} /></label>
+        <label>Notes<textarea value={contactNotes} onBlur={saveContactDraft} onChange={e => setContactNotes(e.target.value)} disabled={pending || !draftReady} /></label>
+        <button type="button" onClick={saveCustomer} disabled={pending || !draftReady}>Save customer independently</button>
+      </details>
+
       {mode === 'quick' ? (
         <form className={styles.entryForm} onSubmit={sold}>
           <label className={styles.fieldGroup}>
@@ -305,7 +428,7 @@ export default function LiveEntry({
               autoComplete="off"
               autoCapitalize="sentences"
               enterKeyHint="next"
-              disabled={pending}
+              disabled={pending || !draftReady}
             />
           </label>
 
@@ -315,17 +438,18 @@ export default function LiveEntry({
               ref={buyerRef}
               className={styles.bigInput}
               value={buyerName}
-              onChange={(event) => setBuyerName(event.target.value)}
+              onChange={(event) => typeCustomer(event.target.value, 'quick')}
+              onBlur={saveContactDraft}
               placeholder="Tap a recent buyer or type a name"
               autoComplete="off"
               autoCapitalize="words"
               autoCorrect="off"
               enterKeyHint="next"
-              disabled={pending}
+              disabled={pending || !draftReady}
             />
           </label>
 
-          {buyerChips(setBuyerName, buyerName)}
+          {buyerChips('quick', buyerName)}
 
           <div className={styles.priceRow}>
             <label className={styles.fieldGroup}>
@@ -339,7 +463,7 @@ export default function LiveEntry({
                   placeholder="0.00"
                   inputMode="decimal"
                   enterKeyHint="done"
-                  disabled={pending}
+                  disabled={pending || !draftReady}
                 />
               </div>
             </label>
@@ -365,14 +489,14 @@ export default function LiveEntry({
           </div>
 
           <div className={styles.liveButtons}>
-            <button className={styles.soldButton} type="submit" disabled={pending}>
+            <button className={styles.soldButton} type="submit" disabled={pending || !draftReady}>
               {pending ? 'Saving…' : 'SOLD'}
             </button>
             <button
               className={styles.unsoldButton}
               type="button"
               onClick={unsold}
-              disabled={pending}
+              disabled={pending || !draftReady}
             >
               UNSOLD
             </button>
@@ -398,16 +522,17 @@ export default function LiveEntry({
               <input
                 className={styles.bigInput}
                 value={bidderName}
-                onChange={(event) => setBidderName(event.target.value)}
+                  onChange={(event) => typeCustomer(event.target.value, 'auction')}
+                  onBlur={saveContactDraft}
                 placeholder="Tap a recent buyer or type a name"
                 autoComplete="off"
                 autoCapitalize="words"
                 autoCorrect="off"
-                disabled={pending}
+                disabled={pending || !draftReady}
               />
             </label>
 
-            {buyerChips(setBidderName, bidderName)}
+            {buyerChips('auction', bidderName)}
 
             <label className={styles.fieldGroup}>
               <span>New high bid</span>
@@ -421,12 +546,12 @@ export default function LiveEntry({
                     openLot.priceCents / 100 + (openLot.buyerName ? 1 : 0)
                   ).toFixed(2)}
                   inputMode="decimal"
-                  disabled={pending}
+                  disabled={pending || !draftReady}
                 />
               </div>
             </label>
 
-            <button className={styles.bidButton} type="submit" disabled={pending}>
+            <button className={styles.bidButton} type="submit" disabled={pending || !draftReady}>
               Update high bid
             </button>
           </form>
@@ -444,7 +569,7 @@ export default function LiveEntry({
               className={styles.unsoldButton}
               type="button"
               onClick={() => closeLot('unsold')}
-              disabled={pending}
+              disabled={pending || !draftReady}
             >
               NO SALE
             </button>
@@ -460,7 +585,7 @@ export default function LiveEntry({
               onChange={(event) => setAuctionItemName(event.target.value)}
               placeholder="Vintage tray"
               autoComplete="off"
-              disabled={pending}
+              disabled={pending || !draftReady}
             />
           </label>
 
@@ -474,12 +599,12 @@ export default function LiveEntry({
                 onChange={(event) => setStartingPrice(event.target.value)}
                 placeholder="0.00"
                 inputMode="decimal"
-                disabled={pending}
+                disabled={pending || !draftReady}
               />
             </div>
           </label>
 
-          <button className={styles.startLotButton} type="submit" disabled={pending}>
+          <button className={styles.startLotButton} type="submit" disabled={pending || !draftReady}>
             OPEN AUCTION LOT
           </button>
         </form>

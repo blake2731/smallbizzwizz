@@ -39,9 +39,13 @@ export default clerkMiddleware(async (auth, request) => {
     }
 
     const isAuctionPreview =
-        process.env.VERCEL_ENV === 'preview' && pathname.startsWith('/auction')
+        process.env.VERCEL_ENV === 'preview' && process.env.AUCTION_PRIVATE_BILLS_ENABLED !== 'true' && pathname.startsWith('/auction')
+    // Only the random bearer-token bill resource is buyer-public. Management and
+    // export remain authenticated, including on the legacy shared preview.
+    const isPrivateBillLink = /^\/auction\/bill\/[a-f0-9]{64}(?:\/checkout)?$/.test(pathname) || pathname === '/auction/paypal/return'
+    const isBillManagement = pathname.startsWith('/auction/billing')
 
-    if (!isPublicRoute(request) && !isAuctionPreview) {
+    if (!isPublicRoute(request) && !isPrivateBillLink && (!isAuctionPreview || isBillManagement)) {
         await auth.protect()
     }
 })

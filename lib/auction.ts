@@ -1,7 +1,6 @@
 import { and, asc, desc, eq, ne, sql } from 'drizzle-orm'
 import { db } from '@/lib/db'
 import {
-  auctionBid,
   auctionBuyer,
   auctionCustomerPreference,
   auctionCustomerProfile,
@@ -86,10 +85,6 @@ export async function ensureAuctionSchema() {
           created_at timestamptz NOT NULL DEFAULT now(),
           updated_at timestamptz NOT NULL DEFAULT now()
         )
-      `)
-      await db.execute(sql`
-        CREATE UNIQUE INDEX IF NOT EXISTS auction_buyer_auction_name_unique
-        ON auction_buyer (auction_id, normalized_name)
       `)
       await db.execute(sql`
         CREATE INDEX IF NOT EXISTS auction_buyer_auction_updated_idx
@@ -212,10 +207,6 @@ export async function ensureAuctionSchema() {
         )
       `)
       await db.execute(sql`
-        CREATE UNIQUE INDEX IF NOT EXISTS auction_customer_profile_user_name_unique
-        ON auction_customer_profile (user_id, normalized_name)
-      `)
-      await db.execute(sql`
         CREATE INDEX IF NOT EXISTS auction_customer_profile_user_updated_idx
         ON auction_customer_profile (user_id, updated_at)
       `)
@@ -327,9 +318,14 @@ export type KnownBuyer = {
   id: number
   displayName: string
   normalizedName: string
+  email: string | null
+  city: string | null
+  phone: string | null
+  notes: string | null
 }
 
 export type AuctionItemView = AuctionItem & {
+  customerId: number | null
   buyerName: string | null
 }
 
@@ -458,7 +454,7 @@ export async function getAuctionState(userId: string, requestedId?: number | nul
       )
   `)
 
-  const [buyers, allItems, buyerHistory, preferences, profiles] = await Promise.all([
+  const [buyers, allItems, preferences, profiles] = await Promise.all([
     db
       .select()
       .from(auctionBuyer)
@@ -469,18 +465,6 @@ export async function getAuctionState(userId: string, requestedId?: number | nul
       .from(auctionItem)
       .where(and(eq(auctionItem.auctionId, auction.id), ne(auctionItem.status, 'void')))
       .orderBy(asc(auctionItem.createdAt)),
-    db
-      .select({
-        id: auctionBuyer.id,
-        displayName: auctionBuyer.displayName,
-        normalizedName: auctionBuyer.normalizedName,
-        updatedAt: auctionBuyer.updatedAt,
-      })
-      .from(auctionBuyer)
-      .innerJoin(auctionSession, eq(auctionBuyer.auctionId, auctionSession.id))
-      .where(eq(auctionSession.userId, userId))
-      .orderBy(desc(auctionBuyer.updatedAt))
-      .limit(500),
     db
       .select()
       .from(auctionCustomerPreference)
@@ -510,12 +494,10 @@ export async function getAuctionState(userId: string, requestedId?: number | nul
   const preferenceByName = new Map(
     preferences.map((preference) => [preference.normalizedName, preference.preferredPaymentMethod]),
   )
-  const profileByName = new Map(
-    profiles.map((profile) => [profile.normalizedName, profile]),
-  )
+  const profileById = new Map(profiles.map((profile) => [profile.id, profile]))
   const buyerViews: AuctionBuyerView[] = buyers
     .map((buyer) => {
-      const profile = profileByName.get(buyer.normalizedName) ?? null
+      const profile = buyer.customerProfileId ? profileById.get(buyer.customerProfileId) ?? null : null
       const buyerPackages: AuctionPackage[] = packagesByBuyerId.get(buyer.id) ?? []
       const items = allItems.filter((item) => item.status === 'sold' && item.buyerId === buyer.id)
       const subtotalCents = items.reduce((sum, item) => sum + item.priceCents, 0)
@@ -527,34 +509,29 @@ export async function getAuctionState(userId: string, requestedId?: number | nul
 
       return {
         ...buyer,
-        email: buyer.email ?? profile?.email ?? null,
+        email: profile ? profile.email : buyer.email,
         shippingProfile: profile,
         packages: buyerPackages,
         items,
         subtotalCents,
         discountCents,
         dueCents,
-        preferredPaymentMethod: preferenceByName.get(buyer.normalizedName) ?? null,
+        preferredPaymentMethod: profiles.filter(p => p.normalizedName === buyer.normalizedName).length === 1
+          ? preferenceByName.get(buyer.normalizedName) ?? null : null,
       }
     })
     .filter((buyer) => buyer.items.length > 0)
 
-  const knownBuyerMap = new Map<string, KnownBuyer>()
-  for (const buyer of buyerHistory) {
-    if (!knownBuyerMap.has(buyer.normalizedName)) {
-      knownBuyerMap.set(buyer.normalizedName, {
-        id: buyer.id,
-        displayName: buyer.displayName,
-        normalizedName: buyer.normalizedName,
-      })
-    }
-    if (knownBuyerMap.size >= 120) break
-  }
+  const knownBuyers: KnownBuyer[] = profiles.map(profile => ({
+    id: profile.id, displayName: profile.displayName, normalizedName: profile.normalizedName,
+    email: profile.email, city: profile.city, phone: profile.phone, notes: profile.notes,
+  }))
 
   const items: AuctionItemView[] = [...allItems]
     .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
     .map((item) => ({
       ...item,
+      customerId: item.buyerId ? buyerById.get(item.buyerId)?.customerProfileId ?? null : null,
       buyerName: item.buyerId ? buyerById.get(item.buyerId)?.displayName ?? null : null,
     }))
 
@@ -565,7 +542,7 @@ export async function getAuctionState(userId: string, requestedId?: number | nul
   return {
     auction,
     buyers: buyerViews,
-    recentBuyers: [...knownBuyerMap.values()],
+    recentBuyers: knownBuyers,
     items,
     openLot,
     metrics: {

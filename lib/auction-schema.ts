@@ -39,6 +39,7 @@ export const auctionBuyer = pgTable(
       .references(() => auctionSession.id, { onDelete: 'cascade' }),
     displayName: text('display_name').notNull(),
     normalizedName: text('normalized_name').notNull(),
+    customerProfileId: integer('customer_profile_id').references(() => auctionCustomerProfile.id),
     privateGroup: boolean('private_group').notNull().default(false),
     email: text('email'),
     shopifyCustomerId: text('shopify_customer_id'),
@@ -79,7 +80,7 @@ export const auctionBuyer = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
-    uniqueIndex('auction_buyer_auction_name_unique').on(t.auctionId, t.normalizedName),
+    uniqueIndex('auction_buyer_auction_customer_unique').on(t.auctionId, t.customerProfileId),
     index('auction_buyer_auction_updated_idx').on(t.auctionId, t.updatedAt),
   ],
 )
@@ -93,6 +94,8 @@ export const auctionCustomerProfile = pgTable(
     displayName: text('display_name').notNull(),
     email: text('email'),
     phone: text('phone'),
+    notes: text('notes'),
+    creationKey: text('creation_key'),
     address1: text('address_1'),
     address2: text('address_2'),
     city: text('city'),
@@ -103,7 +106,8 @@ export const auctionCustomerProfile = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => [
-    uniqueIndex('auction_customer_profile_user_name_unique').on(t.userId, t.normalizedName),
+    index('auction_customer_profile_user_name_idx').on(t.userId, t.normalizedName),
+    uniqueIndex('auction_customer_profile_creation_unique').on(t.userId, t.creationKey),
     index('auction_customer_profile_user_updated_idx').on(t.userId, t.updatedAt),
   ],
 )

@@ -268,12 +268,7 @@
 }
 
 @media print {
-  html,
-  body {
-    margin: 0;
-    padding: 0;
-    background: white;
-  }
+
 
   .screen {
     min-height: auto;
@@ -330,3 +325,4 @@
     justify-self: start;
   }
 }
+

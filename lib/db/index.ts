@@ -16,6 +16,14 @@ function getDb(): DB {
         '(Production, Preview, Development) for deployments.',
     )
   }
+  if (process.env.VERCEL_GIT_COMMIT_REF === 'feature/private-invoices') {
+    const target = new URL(url)
+    if (process.env.VERCEL_ENV !== 'preview' ||
+        !['ep-withered-queen-aqf01v2f.c-8.us-east-1.aws.neon.tech', 'ep-withered-queen-aqf01v2f-pooler.c-8.us-east-1.aws.neon.tech'].includes(target.hostname) ||
+        decodeURIComponent(target.pathname.slice(1)) !== 'auction_invoice_sandbox') {
+      throw new Error('Sandbox database target mismatch')
+    }
+  }
   cached = drizzle(neon(url), { schema })
   return cached
 }

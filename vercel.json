@@ -4,5 +4,6 @@
     "deploymentEnabled": {
       "feature/private-invoices": false
     }
-  }
+  },
+  "buildCommand": "node scripts/verify-sandbox-database.cjs && next build --webpack"
 }

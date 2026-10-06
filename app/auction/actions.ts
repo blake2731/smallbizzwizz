@@ -5,6 +5,7 @@ import { and, desc, eq, isNull, ne } from 'drizzle-orm'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { db } from '@/lib/db'
+import { buyerCustomer, requireCustomer, resolveAuctionBuyer } from '@/lib/auction-customer'
 import { assertPirateShipPackageMatches, PirateShipQuoteError, validatePirateShipQuote } from '@/lib/pirate-ship-quote'
 import { shopifyGraphql } from '@/lib/shopify-admin'
 import { resolveShippoOriginAddressId, shippoRequest } from '@/lib/shippo'
@@ -28,6 +29,7 @@ type LiveItemInput = {
   auctionId: number
   itemName: string
   buyerName?: string
+  customerId?: number | null
   price: string
 }
 
@@ -36,6 +38,7 @@ type EditItemInput = {
   itemId: number
   itemName: string
   buyerName?: string
+  customerId?: number | null
   price: string
   status: 'open' | 'sold' | 'unsold'
   saleType: 'quick' | 'auction' | 'legacy'
@@ -44,7 +47,7 @@ type EditItemInput = {
 async function currentUserId() {
   await ensureAuctionSchema()
 
-  if (process.env.VERCEL_ENV === 'preview') {
+  if (process.env.VERCEL_ENV === 'preview' && process.env.AUCTION_PRIVATE_BILLS_ENABLED !== 'true') {
     return 'auction-preview-owner'
   }
 
@@ -82,78 +85,7 @@ async function touchAuction(auctionId: number) {
     .where(eq(auctionSession.id, auctionId))
 }
 
-async function getOrCreateBuyer(auctionId: number, rawName: string) {
-  const displayName = displayBuyerName(rawName)
-  const normalizedName = normalizeBuyerName(rawName)
-  if (!displayName || !normalizedName) throw new Error('Buyer is required')
-
-  const [existing] = await db
-    .select()
-    .from(auctionBuyer)
-    .where(
-      and(
-        eq(auctionBuyer.auctionId, auctionId),
-        eq(auctionBuyer.normalizedName, normalizedName),
-      ),
-    )
-    .limit(1)
-
-  if (existing) {
-    if (existing.displayName !== displayName) {
-      const [updated] = await db
-        .update(auctionBuyer)
-        .set({ displayName, updatedAt: new Date() })
-        .where(eq(auctionBuyer.id, existing.id))
-        .returning()
-      return updated
-    }
-
-    await db
-      .update(auctionBuyer)
-      .set({ updatedAt: new Date() })
-      .where(eq(auctionBuyer.id, existing.id))
-    return existing
-  }
-
-  const [created] = await db
-    .insert(auctionBuyer)
-    .values({
-      auctionId,
-      displayName,
-      normalizedName,
-    })
-    .returning()
-
-  return created
-}
-
-async function cleanupBuyerIfUnused(buyerId: number | null) {
-  if (!buyerId) return
-
-  const [remainingItems, retainedBids] = await Promise.all([
-    db
-      .select({ id: auctionItem.id })
-      .from(auctionItem)
-      .where(
-        and(
-          eq(auctionItem.buyerId, buyerId),
-          ne(auctionItem.status, 'void'),
-        ),
-      )
-      .limit(1),
-    db
-      .select({ id: auctionBid.id })
-      .from(auctionBid)
-      .where(eq(auctionBid.buyerId, buyerId))
-      .limit(1),
-  ])
-
-  if (!remainingItems.length && !retainedBids.length) {
-    await db.delete(auctionBuyer).where(eq(auctionBuyer.id, buyerId))
-  }
-}
-
-async function insertSoldItem(input: LiveItemInput) {
+async function insertSoldItem(userId: string, input: LiveItemInput) {
   const itemName = input.itemName.trim()
   const buyerName = input.buyerName?.trim() ?? ''
   const priceCents = parseMoneyToCents(input.price)
@@ -161,7 +93,7 @@ async function insertSoldItem(input: LiveItemInput) {
   if (!buyerName) throw new Error('Buyer is required')
   if (priceCents === null) throw new Error('Enter a valid price')
 
-  const buyer = await getOrCreateBuyer(input.auctionId, buyerName)
+  const buyer = await resolveAuctionBuyer(userId, input.auctionId, buyerName, input.customerId)
   await db.insert(auctionItem).values({
     auctionId: input.auctionId,
     buyerId: buyer.id,
@@ -208,7 +140,7 @@ export async function createAuctionAction(formData: FormData) {
 export async function recordSaleAction(input: LiveItemInput) {
   const userId = await currentUserId()
   await requireAuction(userId, input.auctionId)
-  await insertSoldItem(input)
+  await insertSoldItem(userId, input)
   await touchAuction(input.auctionId)
   revalidatePath('/auction')
   return { ok: true }
@@ -264,6 +196,7 @@ export async function updateAuctionHighBidAction(input: {
   auctionId: number
   itemId: number
   buyerName: string
+  customerId?: number | null
   bid: string
 }) {
   const userId = await currentUserId()
@@ -284,7 +217,7 @@ export async function updateAuctionHighBidAction(input: {
     )
   }
 
-  const buyer = await getOrCreateBuyer(input.auctionId, input.buyerName)
+  const buyer = await resolveAuctionBuyer(userId, input.auctionId, input.buyerName, input.customerId)
   const previousBuyerId = item.buyerId
 
   await db.insert(auctionBid).values({
@@ -345,7 +278,6 @@ export async function closeAuctionLotAction(input: {
     throw new Error('There is no high bidder yet.')
   }
 
-  const previousBuyerId = item.buyerId
   await db
     .update(auctionItem)
     .set({
@@ -354,9 +286,7 @@ export async function closeAuctionLotAction(input: {
     })
     .where(eq(auctionItem.id, item.id))
 
-  if (input.result === 'unsold') {
-    await cleanupBuyerIfUnused(previousBuyerId)
-  }
+  // Closing without a sale retains customer identity, contact and participation.
 
   await touchAuction(input.auctionId)
   revalidatePath('/auction')
@@ -381,12 +311,11 @@ export async function editItemAction(input: EditItemInput) {
     const buyerName = input.buyerName?.trim() ?? ''
     if (!buyerName && input.status === 'sold') throw new Error('Sold items need a buyer.')
     if (buyerName) {
-      const buyer = await getOrCreateBuyer(input.auctionId, buyerName)
+      const buyer = await resolveAuctionBuyer(userId, input.auctionId, buyerName, input.customerId)
       buyerId = buyer.id
     }
   }
 
-  const previousBuyerId = item.buyerId
   await db
     .update(auctionItem)
     .set({
@@ -399,9 +328,7 @@ export async function editItemAction(input: EditItemInput) {
     })
     .where(eq(auctionItem.id, item.id))
 
-  if (previousBuyerId && previousBuyerId !== buyerId) {
-    await cleanupBuyerIfUnused(previousBuyerId)
-  }
+
 
   await touchAuction(input.auctionId)
   revalidatePath('/auction')
@@ -426,7 +353,7 @@ export async function undoLastItemAction(auctionId: number) {
     .set({ status: 'void', voidedAt: new Date() })
     .where(eq(auctionItem.id, last.id))
 
-  await cleanupBuyerIfUnused(last.buyerId)
+  // Undo only the item; customer identity and contact remain durable.
   await touchAuction(auctionId)
 
   revalidatePath('/auction')
@@ -1495,6 +1422,7 @@ export async function createShopifyDraftOrderAction(input: {
   auctionId: number
   buyerId: number
 }) {
+  if(process.env.AUCTION_PRIVATE_BILLS_ENABLED==='true')throw new Error('Shopify invoice creation is disabled in the private bill flow')
   const userId = await currentUserId()
   const auction = await requireAuction(userId, input.auctionId)
 
@@ -1521,16 +1449,7 @@ export async function createShopifyDraftOrderAction(input: {
     throw new Error('Save the shipping charge before creating a Shopify invoice.')
   }
 
-  const [profile] = await db
-    .select()
-    .from(auctionCustomerProfile)
-    .where(
-      and(
-        eq(auctionCustomerProfile.userId, userId),
-        eq(auctionCustomerProfile.normalizedName, buyer.normalizedName),
-      ),
-    )
-    .limit(1)
+  const profile = await buyerCustomer(userId, buyer)
 
   if (!profile?.address1 || !profile.city || !profile.state || !profile.postalCode) {
     throw new Error('Save the customer shipping address before creating a Shopify invoice.')
@@ -1586,7 +1505,7 @@ export async function createShopifyDraftOrderAction(input: {
           zip: profile.postalCode,
           countryCode: profile.countryCode || 'US',
         },
-        email: buyer.email || profile.email || undefined,
+        email: profile.email || undefined,
         shippingLine: {
           title: 'Shipping',
           priceWithCurrency: {
@@ -2080,6 +1999,7 @@ export async function sendShopifyInvoiceAction(input: {
   auctionId: number
   buyerId: number
 }) {
+  if(process.env.AUCTION_PRIVATE_BILLS_ENABLED==='true')throw new Error('Shopify invoice sending is disabled in the private bill flow')
   const userId = await currentUserId()
   await requireAuction(userId, input.auctionId)
 
@@ -2094,18 +2014,9 @@ export async function sendShopifyInvoiceAction(input: {
     throw new Error('Create the Shopify checkout link before sending the invoice.')
   }
 
-  const [profile] = await db
-    .select()
-    .from(auctionCustomerProfile)
-    .where(
-      and(
-        eq(auctionCustomerProfile.userId, userId),
-        eq(auctionCustomerProfile.normalizedName, buyer.normalizedName),
-      ),
-    )
-    .limit(1)
+  const profile = await buyerCustomer(userId, buyer)
 
-  const email = (buyer.email || profile?.email || '').trim().toLowerCase()
+  const email = (profile.email || '').trim().toLowerCase()
   if (!email) {
     throw new Error('Save the customer email before sending a Shopify invoice.')
   }
@@ -2363,41 +2274,12 @@ export async function saveBuyerShippingProfileAction(input: {
   if (countryCode.length !== 2) throw new Error('Country code must be two letters')
 
   const now = new Date()
-  await db
-    .insert(auctionCustomerProfile)
-    .values({
-      userId,
-      normalizedName: buyer.normalizedName,
-      displayName: buyer.displayName,
-      email: email || null,
-      phone: phone || null,
-      address1: address1 || null,
-      address2: address2 || null,
-      city: city || null,
-      state: state || null,
-      postalCode: postalCode || null,
-      countryCode,
-      shopifyCustomerId: buyer.shopifyCustomerId,
-      updatedAt: now,
-    })
-    .onConflictDoUpdate({
-      target: [
-        auctionCustomerProfile.userId,
-        auctionCustomerProfile.normalizedName,
-      ],
-      set: {
-        displayName: buyer.displayName,
-        email: email || null,
-        phone: phone || null,
-        address1: address1 || null,
-        address2: address2 || null,
-        city: city || null,
-        state: state || null,
-        postalCode: postalCode || null,
-        countryCode,
-        updatedAt: now,
-      },
-    })
+  const profile = await buyerCustomer(userId, buyer)
+  await db.update(auctionCustomerProfile).set({
+    email: email || null, phone: phone || null, address1: address1 || null,
+    address2: address2 || null, city: city || null, state: state || null,
+    postalCode: postalCode || null, countryCode, updatedAt: now,
+  }).where(and(eq(auctionCustomerProfile.id, profile.id), eq(auctionCustomerProfile.userId, userId)))
 
   await db
     .update(auctionBuyer)
@@ -2430,27 +2312,9 @@ export async function saveBuyerContactAction(input: {
     .set({ email: email || null, updatedAt: now })
     .where(eq(auctionBuyer.id, input.buyerId))
 
-  await db
-    .insert(auctionCustomerProfile)
-    .values({
-      userId,
-      normalizedName: buyer.normalizedName,
-      displayName: buyer.displayName,
-      email: email || null,
-      countryCode: 'US',
-      updatedAt: now,
-    })
-    .onConflictDoUpdate({
-      target: [
-        auctionCustomerProfile.userId,
-        auctionCustomerProfile.normalizedName,
-      ],
-      set: {
-        displayName: buyer.displayName,
-        email: email || null,
-        updatedAt: now,
-      },
-    })
+  const profile = await buyerCustomer(userId, buyer)
+  await db.update(auctionCustomerProfile).set({ email: email || null, updatedAt: now })
+    .where(and(eq(auctionCustomerProfile.id, profile.id), eq(auctionCustomerProfile.userId, userId)))
 
   revalidatePath('/auction')
   return { ok: true }
@@ -2497,7 +2361,7 @@ export async function importRowsAction(formData: FormData) {
     if (parseMoneyToCents(price) === null) continue
 
     if (buyerName) {
-      await insertSoldItem({ auctionId, itemName, buyerName, price })
+      await insertSoldItem(userId, { auctionId, itemName, buyerName, price })
     } else {
       await insertUnsoldItem({ auctionId, itemName, price })
     }
@@ -2509,4 +2373,29 @@ export async function importRowsAction(formData: FormData) {
   }
 
   revalidatePath('/auction')
+}
+
+export async function saveProspectiveCustomerAction(input: {
+  auctionId: number; customerId?: number | null; creationKey: string;
+  displayName: string; email: string; phone: string; city: string; notes: string;
+}) {
+  const userId = await currentUserId()
+  await requireAuction(userId, input.auctionId)
+  const displayName = displayBuyerName(input.displayName)
+  if (!displayName) throw new Error('Customer name is required')
+  if (!/^[a-zA-Z0-9-]{16,80}$/.test(input.creationKey)) throw new Error('Invalid customer save key')
+  const values = { displayName, normalizedName: normalizeBuyerName(displayName),
+    email: input.email.trim().toLowerCase() || null, phone: input.phone.trim() || null,
+    city: input.city.trim() || null, notes: input.notes.trim() || null, updatedAt: new Date() }
+  let profile
+  if (input.customerId != null) {
+    await requireCustomer(userId, input.customerId)
+    ;[profile] = await db.update(auctionCustomerProfile).set(values)
+      .where(and(eq(auctionCustomerProfile.id, input.customerId), eq(auctionCustomerProfile.userId, userId))).returning()
+  } else {
+    ;[profile] = await db.insert(auctionCustomerProfile).values({ userId, creationKey: input.creationKey, ...values })
+      .onConflictDoUpdate({ target: [auctionCustomerProfile.userId, auctionCustomerProfile.creationKey], set: values }).returning()
+  }
+  revalidatePath('/auction')
+  return { ok: true, customerId: profile.id }
 }
